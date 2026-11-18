@@ -12,6 +12,7 @@ import { initializeSettings } from "./modules/settings.js";
 
 import { initializeImportExport } from "./services/import-export.js";
 import { initializeNotifications } from "./services/notifications.js";
+import { initializeReports } from "./services/reports.js";
 
 const APP_NAME = "PCB Component BOM & Inventory Manager";
 
@@ -33,6 +34,7 @@ function initializeApplication() {
         initializeSettings();
         initializeImportExport();
         initializeNotifications();
+        initializeReports();
 
         window.PCBManager = {
             name: APP_NAME,
@@ -71,6 +73,24 @@ function initializeApplication() {
             refreshNotifications() {
                 return import("./services/notifications.js").then(module => {
                     module.refreshNotifications();
+                });
+            },
+
+            exportInventoryReport() {
+                return import("./services/reports.js").then(module => {
+                    module.exportInventoryReportCSV();
+                });
+            },
+
+            exportStockMovementReport() {
+                return import("./services/reports.js").then(module => {
+                    module.exportStockMovementReportCSV();
+                });
+            },
+
+            printInventoryReport() {
+                return import("./services/reports.js").then(module => {
+                    module.printInventoryReport();
                 });
             }
         };
