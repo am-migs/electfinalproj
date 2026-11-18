@@ -82,7 +82,7 @@ function initializeApplication() {
                 });
             },
 
-            exportStockMovementReport() {
+            exportMovementReport() {
                 return import("./services/reports.js").then(module => {
                     module.exportStockMovementReportCSV();
                 });
