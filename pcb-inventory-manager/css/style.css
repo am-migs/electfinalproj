@@ -2028,3 +2028,30 @@ td.empty-message {
         align-items: flex-start;
     }
 }
+
+
+/* =====================================================
+   INVENTORY CSV IMPORT AND EXPORT
+   ===================================================== */
+
+.inventory-transfer-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+#inventory-transfer-message {
+    margin: 10px 0 15px;
+    font-size: 11px;
+}
+
+@media screen and (max-width: 768px) {
+    .inventory-transfer-controls {
+        width: 100%;
+    }
+
+    .inventory-transfer-controls button {
+        flex: 1;
+    }
+}
