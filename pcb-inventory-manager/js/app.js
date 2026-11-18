@@ -11,6 +11,7 @@ import { initializeAnalytics } from "./modules/analytics.js";
 import { initializeSettings } from "./modules/settings.js";
 
 import { initializeImportExport } from "./services/import-export.js";
+import { initializeNotifications } from "./services/notifications.js";
 
 const APP_NAME = "PCB Component BOM & Inventory Manager";
 
@@ -31,6 +32,7 @@ function initializeApplication() {
         initializeAnalytics();
         initializeSettings();
         initializeImportExport();
+        initializeNotifications();
 
         window.PCBManager = {
             name: APP_NAME,
@@ -63,6 +65,12 @@ function initializeApplication() {
             refreshPinout() {
                 return import("./modules/pinout.js").then(module => {
                     module.refreshPinout();
+                });
+            },
+
+            refreshNotifications() {
+                return import("./services/notifications.js").then(module => {
+                    module.refreshNotifications();
                 });
             }
         };
