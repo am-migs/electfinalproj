@@ -330,8 +330,6 @@ function WorkspaceApp({ user, organization, role, onSignOut }) {
   return <div className="shell"><aside className="side"><div className="brand"><div className="mark">PCB</div><div><b>PCB Manager</b><small style={{ display:"block" }}>Component workspace</small></div></div><nav className="nav">{nav.map(([name,Icon])=><button key={name} className={page===name?"active":""} onClick={()=>setPage(name)}><Icon size={17}/>{name}</button>)}</nav><small>PCB Component BOM & Inventory Manager<br/>Supabase cloud · {role}</small></aside><div className="main"><header className="top"><h1>{page}</h1><div className="user"><div className="avatar">{(db.profile.name||"A").slice(0,2).toUpperCase()}</div><b>{db.profile.name}</b><button className="btn alt" onClick={onSignOut}>Sign out</button></div></header><main className="content">{body}</main><footer className="footer"><span>PCB Component BOM & Inventory Manager · Cloud workspace</span><span>{organization.name} · {role} · Antonio Miguel L. Lacanlale · BSCPE 3A</span></footer></div></div>;
 }
 
-}
-
 export default function App() {
   const [session, setSession] = useState(null);
   const [organization, setOrganization] = useState(null);
