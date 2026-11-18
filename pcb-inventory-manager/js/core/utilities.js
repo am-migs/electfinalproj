@@ -1,4 +1,6 @@
 
+import { appState } from "./state.js";
+
 export function generateID(prefix = "PCB") {
     const timestamp = Date.now().toString(36).toUpperCase();
 
@@ -10,15 +12,24 @@ export function generateID(prefix = "PCB") {
     return `${prefix}-${timestamp}-${random}`;
 }
 
-export function formatCurrency(amount, currency = "PHP") {
+export function formatCurrency(amount, currency = appState.settings?.currency || "PHP") {
     const value = Number(amount) || 0;
 
-    return new Intl.NumberFormat("en-PH", {
-        style: "currency",
-        currency: currency,
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }).format(value);
+    try {
+        return new Intl.NumberFormat("en-PH", {
+            style: "currency",
+            currency,
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }).format(value);
+    } catch (error) {
+        return new Intl.NumberFormat("en-PH", {
+            style: "currency",
+            currency: "PHP",
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }).format(value);
+    }
 }
 
 export function formatDate(date) {
