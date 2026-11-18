@@ -8,6 +8,7 @@ import { initializeDashboard } from "./modules/dashboard.js";
 import { initializeBOM } from "./modules/bom.js";
 import { initializePinout } from "./modules/pinout.js";
 import { initializeAnalytics } from "./modules/analytics.js";
+import { initializeSettings } from "./modules/settings.js";
 import { initializeCatalogSearch } from "./modules/catalog-search.js";
 
 import { initializeImportExport } from "./services/import-export.js";
@@ -28,6 +29,10 @@ function initializeApplication() {
     console.log(`${APP_NAME} is initializing...`);
 
     try {
+        // Initialize page-generating modules first.
+        initializeSettings();
+
+        // Initialize navigation after all page buttons exist.
         const navigation = initializeNavigation();
 
         if (!navigation) {
