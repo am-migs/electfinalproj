@@ -162,6 +162,8 @@ function WorkspaceApp({ user, organization, role, onSignOut }) {
       partName: part.name,
       type: editing ? "Stock correction" : "Initial stock",
       quantity: Math.abs(stockDifference),
+      quantityBefore: previousStock,
+      quantityAfter: part.stock,
       note: editing
         ? `Component details edited (stock changed from ${previousStock} to ${part.stock}).`
         : "Initial inventory entry",
@@ -179,6 +181,7 @@ function WorkspaceApp({ user, organization, role, onSignOut }) {
     document.getElementById("component-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
   const deletePart = part => {
+    if (movements.some(move => move.partId === part.id)) return alert("This component has stock movement history and cannot be deleted. Keep it in inventory so its audit history remains intact.");
     if (!confirm("Delete " + part.name + "? This also removes it from BOM lines.")) return;
     update({
       inventory: inventory.filter(x => x.id !== part.id),
@@ -193,7 +196,7 @@ function WorkspaceApp({ user, organization, role, onSignOut }) {
     if (next < 0) return alert("Insufficient stock. Available quantity: " + part.stock);
     update({
       inventory: inventory.map(x => x.id === part.id ? { ...x, stock: next, updatedAt: new Date().toISOString() } : x),
-      movements: [{ id: makeId(), partId: part.id, partName: part.name, type: movementType, quantity: amount, note: movementNote.trim(), date: new Date().toISOString() }, ...movements]
+      movements: [{ id: makeId(), partId: part.id, partName: part.name, type: movementType, quantity: amount, quantityBefore: Number(part.stock), quantityAfter: next, note: movementNote.trim(), date: new Date().toISOString() }, ...movements]
     });
     setMovementQty("1"); setMovementNote("");
   };
