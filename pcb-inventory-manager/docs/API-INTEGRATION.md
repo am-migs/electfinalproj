@@ -1,73 +1,62 @@
-
-# Component Catalog Integration
+# Component Catalogue Integration
 
 ## Selected Data Source
 
 **JLCParts**
 
-Repository: https://github.com/yaqwsx/jlcparts
-
-Live Catalog: https://yaqwsx.github.io/jlcparts/
-
-License: MIT
+- Repository: https://github.com/yaqwsx/jlcparts
+- Live catalogue: https://yaqwsx.github.io/jlcparts/
+- License: MIT (verify upstream license and data conditions when redistributing catalogue-derived data)
 
 ## Purpose
 
-JLCParts will serve as the external component data source for the PCB Component BOM & Inventory Manager.
-
-It provides searchable information about electronic components available through the JLCPCB assembly catalogue.
-
-## Planned Features
-
-- Search components by manufacturer part number (MPN).
-- Search by LCSC part number or component description.
-- Display component manufacturer and description.
-- Display component category and technical attributes.
-- Retrieve available datasheet links.
-- Display available pricing information.
-- Allow users to review component information before adding it to inventory.
-
-## Integration Approach
-
-JLCParts is not a conventional REST API. The application will use its publicly published component catalogue data.
-
-The integration will:
-
-1. Retrieve the published catalogue data.
-2. Process and search the component records.
-3. Display matching results in the application.
-4. Allow users to select a component.
-5. Populate the inventory form with the available information.
-6. Require user confirmation before saving the component.
-
-## Data Fields
-
-The integration will attempt to retrieve:
-
-- LCSC Part Number
-- Manufacturer
-- Component Description
-- Category
-- Technical Attributes
-- Datasheet URL
-- Product URL
-- Available Price Information
-- Stock Information, when available
-
-## Limitations
-
-- Catalogue coverage is focused on JLCPCB-supported components.
-- Not all electronic components will be available.
-- Pricing and stock information may change.
-- The published catalogue may require downloading and indexing before searching.
-- The integration must respect the source repository's license and data usage conditions.
-
-## Security
-
-No API credentials are required for accessing the publicly published catalogue data.
+JLCParts provides searchable information about electronic components listed in the JLCPCB/LCSC assembly catalogue. The PCB Component BOM & Inventory Manager uses it as an optional source for component lookup and inventory-form prefill.
 
 ## Integration Status
 
-Selected: JLCParts
+**Implemented in the React inventory page.** The application imports `searchComponents` and `getCatalogueInformation` from `js/services/jlcparts.js`.
 
-Implementation: Pending
+The current interface supports:
+- Search by LCSC part number.
+- Search by manufacturer or component description.
+- Display LCSC number, manufacturer, description, and category when supplied by the catalogue.
+- Prefill the inventory form from a selected result.
+- User review and confirmation before saving the component to local inventory.
+
+## Data Retrieval Approach
+
+JLCParts is not a conventional REST API. The service reads its published catalogue data:
+1. Retrieve the published manifest.
+2. Read the search index or selected search bucket.
+3. Load the relevant catalogue shard(s).
+4. Decode component fields and attributes.
+5. Return matching records to the browser interface.
+
+No API key is required. Initial searches may download sizeable data files. Results depend on the upstream published dataset and network/browser support.
+
+## Data Fields
+
+The service currently decodes fields available in the catalogue schema, including:
+- LCSC part number
+- Manufacturer
+- Component description
+- Datasheet URL
+- Price and stock fields, when present
+- Image and product URL, when present
+- Category/subcategory
+- Technical attributes
+
+The React inventory form currently uses the LCSC number, description, manufacturer, datasheet, category (when it matches a local category), and catalogue price when available. Catalogue pricing and stock should not be treated as guaranteed live values.
+
+## Limitations and Validation
+
+- Catalogue coverage is focused on JLCPCB-supported parts; not every component will be found.
+- Catalogue publication cadence controls data freshness.
+- The first search can take longer because indexes and data shards are downloaded.
+- Search must be manually tested in the target browser with an active internet connection.
+- No real-time inventory reservation or purchase ordering is performed.
+- The catalogue search is optional; users can add components manually.
+
+## Security
+
+The integration does not require credentials or a private API key. Do not add third-party API keys or secret tokens to frontend source code.
