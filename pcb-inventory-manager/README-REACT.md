@@ -58,3 +58,15 @@ The React workspace uses LocalStorage key `pcbManagerReactV2`. The legacy vanill
 4. Create a project, add BOM lines/designators, edit quantities, and verify costs/shortages.
 5. Test JLCParts search while online.
 6. Run `npm run build` and test the responsive layout in a browser.
+
+
+## Supabase migration (in progress)
+
+The project direction is now a full multi-user application backed by Supabase and PostgreSQL. The current React frontend still uses LocalStorage; cloud authentication and persistence are not active yet.
+
+- [Implementation roadmap and repository audit](docs/IMPLEMENTATION_ROADMAP.md)
+- [Supabase project setup](docs/SUPABASE_SETUP.md)
+- Initial organization-scoped database migration: `supabase/migrations/202611180001_initial_schema.sql`
+- Environment template: `.env.example`
+
+Do not add real Supabase credentials to Git. Configure them locally in `.env.local` after creating the Supabase project. The service-role key must never be exposed to the browser.
