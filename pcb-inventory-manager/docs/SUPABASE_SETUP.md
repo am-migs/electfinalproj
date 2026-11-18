@@ -1,28 +1,37 @@
-# Supabase setup — PCB Manager
+# Supabase setup — PCB Component BOM & Inventory Manager
 
-This guide configures the React application at `pcb-inventory-manager` to use Supabase.
-
-## Current integration
-
-- Email/password registration and sign-in, sign-out, session persistence, password reset, and password update.
-- Personal organization/workspace creation through a database trigger.
-- Organization-scoped inventory, projects, BOM lines, and stock movement history.
-- Profile preferences (display currency and low-stock alerts).
-- Role-aware editing backed by PostgreSQL Row Level Security (RLS).
-- Optional LocalStorage-to-cloud migration and JSON backup/restore.
+This guide describes how the React application in `pcb-inventory-manager/` connects to Supabase.
 
 ## 1. Supabase project
 
-Create a Supabase project and keep its database password private. The project URL is available in Project Settings → API.
+Create a Supabase project. The project URL and publishable key are available in the project's API settings. Keep the database password and any service-role/secret key private.
 
 ## 2. Apply database migrations
 
-The migrations must be applied in this order:
+Apply the following migrations in order:
 
 1. `supabase/migrations/202611180001_initial_schema.sql`
 2. `supabase/migrations/202611180002_profile_preferences.sql`
+3. `supabase/migrations/202611180003_authenticated_table_grants.sql`
 
-**Fresh project using the CLI:**
+The migrations provide:
+
+- Initial tables, foreign keys, indexes, helper functions, triggers, and RLS policies.
+- The `profiles.preferences` JSONB field used for user display preferences.
+- SQL privileges for the Supabase `authenticated` role. These grants do not disable or bypass RLS.
+
+### Apply with Supabase SQL Editor
+
+Open the SQL Editor in your Supabase project. Open each migration file from the repository, copy its complete contents, and run the migrations in numerical order.
+
+If migration 001 was already applied manually, do not run it again blindly. Check which migrations have already been applied and run only the missing ones. In particular:
+
+- If the application reports `column profiles.preferences does not exist`, apply migration 002.
+- If it reports `permission denied for table ...` for an authenticated user, apply migration 003. Do not disable RLS.
+
+### Apply with the Supabase CLI
+
+For a fresh project configured for CLI migrations:
 
 ```bash
 cd pcb-inventory-manager
@@ -32,64 +41,102 @@ npx supabase link --project-ref YOUR_PROJECT_REF
 npx supabase db push
 ```
 
-If the initial schema migration was already pasted into the Supabase SQL Editor, do not blindly run the initial migration again. Apply only `202611180002_profile_preferences.sql` in SQL Editor. Confirm that `profiles.preferences` exists before using the updated application.
+Use the CLI workflow consistently for future schema changes so the migration history stays synchronized.
 
-The initial migration creates profiles, organizations, memberships, components, suppliers, projects, BOM items, stock movements, purchase orders, purchase-order items, and activity logs. It also enables RLS and creates the organization access policies.
+## 3. Configure local environment variables
 
-## 3. Configure local environment
-
-Create `.env.local` in `pcb-inventory-manager`:
+Create `.env.local` in the same directory as `package.json`:
 
 ```env
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=YOUR_SUPABASE_PUBLISHABLE_KEY
 ```
 
-Use the Supabase **publishable** key (or legacy anon key) only. Never put a service-role/secret key in Vite variables or frontend code. Do not commit `.env.local`.
+The repository's `.env.example` contains placeholders. Do not commit `.env.local`.
 
-The repository contains `.env.example` with placeholders.
+The app supports the publishable key and a legacy anon-key environment variable fallback. Prefer `VITE_SUPABASE_PUBLISHABLE_KEY`.
+
+**Security:** Never place a Supabase service-role/secret key in a Vite environment variable or frontend source. Vite exposes `VITE_*` variables to the browser. RLS policies must enforce access to private workspace data.
 
 ## 4. Configure Supabase Auth URLs
 
-In Authentication → URL Configuration:
+In Supabase Authentication → URL Configuration, configure:
 
 - Site URL: `https://electfinalproj.vercel.app`
-- Redirect URLs: `https://electfinalproj.vercel.app/**`
+- Production redirect URL: `https://electfinalproj.vercel.app/**`
 - Local redirect URL: `http://localhost:5173/**`
 
-Enable email confirmation according to the intended registration policy. Test the confirmation and password-recovery email links.
+If the application is deployed to another domain, add that domain to the allowed redirect URLs. Configure email confirmation according to the intended account-registration policy, then test confirmation and password-recovery links.
 
 ## 5. Configure Vercel
 
-The Vercel project should use:
+Vercel project settings:
 
-- Root Directory: `pcb-inventory-manager`
-- Framework: Vite
-- Build command: `npm run build`
-- Output directory: `dist`
+| Setting | Value |
+|---|---|
+| Root Directory | `pcb-inventory-manager` |
+| Framework Preset | Vite |
+| Build Command | `npm run build` |
+| Output Directory | `dist` |
 
-Add these environment variables for Production (and Preview/Development if used):
+Add these environment variables for each environment that should run the app:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 
-Redeploy after changing environment variables. The publishable key is intended for browser use; RLS is responsible for protecting database rows.
+Redeploy after changing environment variables. A local `.env.local` file does not configure Vercel automatically.
 
-## 6. Verify the application
+## 6. Authentication and workspace creation
 
-1. Register a new account and confirm its email if confirmation is enabled.
-2. Sign in and verify that a personal workspace is created.
-3. Test password reset and set a new password from the recovery screen.
-4. Add/edit/delete components and projects; test stock-in/out and movement history.
-5. Test BOM quantities, designators, cost, and shortage calculations.
-6. Change currency and low-stock preferences, refresh, and confirm they persist.
-7. Test a viewer account and confirm it cannot modify records.
-8. Register a second user and verify that the first user's data is not visible.
-9. Test LocalStorage migration in the same browser that contains the old data.
-10. Export and restore a JSON backup.
+The application uses Supabase email/password authentication. When a new Auth user is created, the database trigger in migration 001:
 
-Do not disable RLS to make a request succeed. Database policies—not just UI restrictions—must enforce access.
+1. Creates or updates the user's profile.
+2. Creates a personal organization/workspace.
+3. Adds the user to that organization with the `owner` role.
 
-## Current verification status
+The frontend then loads the user's organization membership and workspace data.
 
-The GitHub Actions production build passed after the recent integration fixes. Live Supabase authentication, RLS, database migration, and browser workflows still need to be tested against the configured Supabase project.
+## 7. Roles and Row Level Security
+
+The schema defines four roles:
+
+- `owner`
+- `admin`
+- `editor`
+- `viewer`
+
+RLS policies allow organization members to read workspace data. Owners and admins can manage organization membership; owners, admins, and editors can manage inventory, projects, BOM items, and stock operations. Viewers are intended to have read-only access. Activity log reads are restricted to owners and admins.
+
+The grants in migration 003 allow the authenticated database role to reach the tables through the Supabase API. RLS remains the row-level authorization layer. Do not disable RLS to resolve a permission error.
+
+## 8. Verify the integration
+
+After setup, test the following in the deployed application:
+
+1. Register a new account.
+2. Confirm the email if confirmation is enabled.
+3. Sign in and confirm the workspace loads.
+4. Sign out and sign back in to verify session persistence.
+5. Add, edit, and delete a test component.
+6. Record stock-in, stock-out, and stock correction operations.
+7. Create a project and add BOM lines.
+8. Refresh the browser and confirm saved data remains available.
+9. Change currency and low-stock alert preferences, then refresh.
+10. Test password reset and password update.
+11. Verify that users in separate workspaces cannot access each other's records.
+12. Test JSON export and restore.
+
+The user has confirmed that the application is now working after resolving the missing authenticated table grants and profile preferences column. Continue to test any new schema or authentication changes before treating them as verified.
+
+## 9. Troubleshooting
+
+| Error or symptom | Cause to check | Action |
+|---|---|---|
+| Supabase setup required | Missing URL or publishable key | Check `.env.local` and Vercel environment variables |
+| Permission denied for `organization_members` or another table | Authenticated SQL grants missing | Apply migration 003 |
+| `profiles.preferences` does not exist | Preferences migration missing | Apply migration 002 |
+| Redirect or recovery link fails | Current domain missing from Auth URL allowlist | Update Site URL and Redirect URLs |
+| Workspace membership not found | User does not have an organization membership | Inspect the Auth user and organization membership records securely |
+| Local app works but deployed app does not | Vercel environment variables or deployment are outdated | Verify Vercel variables and redeploy |
+
+When diagnosing an issue, preserve the complete error message and note which operation caused it. Never paste secret keys into source control, screenshots, or public issue reports.
