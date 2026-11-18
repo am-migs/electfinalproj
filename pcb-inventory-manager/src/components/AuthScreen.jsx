@@ -63,3 +63,61 @@ export default function AuthScreen() {
     </section>
   </main>;
 }
+
+
+export function PasswordRecoveryScreen({ onComplete }) {
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function submit(event) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+
+    if (password.length < 8) {
+      setError("Use a password with at least 8 characters.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("The passwords do not match.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const { error: updateError } = await (await import("../lib/supabase.js"))
+        .requireSupabase()
+        .auth.updateUser({ password });
+      if (updateError) throw updateError;
+      setMessage("Your password has been updated.");
+      onComplete?.();
+    } catch (err) {
+      setError(err.message || "Unable to update your password.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <main className="auth-shell">
+    <section className="auth-card">
+      <div className="auth-brand">
+        <div className="auth-mark"><Boxes size={25}/></div>
+        <div><h1>PCB Manager</h1><p>Component BOM & Inventory Manager</p></div>
+      </div>
+      <div className="auth-heading">
+        <h2>Set a new password</h2>
+        <p>Choose a new password for your account.</p>
+      </div>
+      <form onSubmit={submit} className="auth-form">
+        <label>New password<input type="password" autoComplete="new-password" minLength={8} value={password} onChange={event => setPassword(event.target.value)} required/></label>
+        <label>Confirm new password<input type="password" autoComplete="new-password" minLength={8} value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} required/></label>
+        {error && <div className="auth-alert error" role="alert">{error}</div>}
+        {message && <div className="auth-alert success" role="status">{message}</div>}
+        <button className="auth-submit" type="submit" disabled={busy}>{busy ? <><LoaderCircle className="spin" size={17}/> Updating…</> : "Update password"}</button>
+      </form>
+    </section>
+  </main>;
+}
