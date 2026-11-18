@@ -109,12 +109,17 @@ function WorkspaceApp({ user, organization, role, onSignOut }) {
     return () => { active = false; };
   }, [organization.id, user]);
   useEffect(() => { getCatalogueInformation().then(setCatalogInfo).catch(() => {}); }, [] );
-  useEffect(() => {\n    if (!cloudReady || !cloudSnapshot.current) return;
-    if (!["owner", "admin", "editor"].includes(role)) return;\n    const snapshot = db;
-    const previous = cloudSnapshot.current;\n    if (snapshot === previous) return;
-    cloudQueue.current = cloudQueue.current.then(() =>\n      syncCloudWorkspace(organization.id, user, snapshot, previous)
+  useEffect(() => {
+    if (!cloudReady || !cloudSnapshot.current) return;
+    if (!["owner", "admin", "editor"].includes(role)) return;
+    const snapshot = db;
+    const previous = cloudSnapshot.current;
+    if (snapshot === previous) return;
+    cloudQueue.current = cloudQueue.current.then(() =>
+      syncCloudWorkspace(organization.id, user, snapshot, previous)
     ).then(() => { cloudSnapshot.current = snapshot; setCloudError(""); })
-      .catch(error => { setCloudError("Cloud save failed: " + (error.message || "Unknown database error")); });\n  }, [db, cloudReady, organization.id, user, role]);
+      .catch(error => { setCloudError("Cloud save failed: " + (error.message || "Unknown database error")); });
+  }, [db, cloudReady, organization.id, user, role]);
 
   const inventory = db.inventory || [];
   const projects = db.projects || [];
@@ -132,7 +137,8 @@ function WorkspaceApp({ user, organization, role, onSignOut }) {
   }), [inventory, query, category, sort]);
   const update = patch => {
     if (!["owner", "admin", "editor"].includes(role)) { alert("Your workspace role is read-only. Ask an administrator for edit access."); return; }
-    setDb(old => ({ ...old, ...patch }));\n  };
+    setDb(old => ({ ...old, ...patch }));
+  };
   const resetPartForm = () => { setEditing(null); setForm(blankPart); };
   const savePart = event => {
     event.preventDefault();
