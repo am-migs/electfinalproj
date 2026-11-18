@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Boxes, Eye, EyeOff, LoaderCircle } from "lucide-react";
-import { requestPasswordReset, signIn, signUp } from "../lib/auth.js";
+import { requestPasswordReset, signIn, signUp, updatePassword } from "../lib/auth.js";
 
 export default function AuthScreen() {
   const [mode, setMode] = useState("login");
@@ -88,9 +88,7 @@ export function PasswordRecoveryScreen({ onComplete }) {
 
     setBusy(true);
     try {
-      const { error: updateError } = await (await import("../lib/supabase.js"))
-        .requireSupabase()
-        .auth.updateUser({ password });
+      const { error: updateError } = await updatePassword(password);
       if (updateError) throw updateError;
       setMessage("Your password has been updated.");
       onComplete?.();
