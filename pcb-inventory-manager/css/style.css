@@ -2055,3 +2055,131 @@ td.empty-message {
         flex: 1;
     }
 }
+
+
+/* =====================================================
+   JLCParts CATALOG SEARCH
+   ===================================================== */
+
+.catalog-search-panel {
+    margin-bottom: 22px;
+}
+
+.catalog-search-panel .panel-header {
+    align-items: center;
+}
+
+.catalog-source-label {
+    padding: 5px 10px;
+    border-radius: 20px;
+    background: var(--green-pale);
+    color: var(--primary);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.catalog-search-form {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.catalog-search-form input {
+    flex: 1;
+    min-width: 0;
+    padding: 11px 13px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--off-white);
+}
+
+.catalog-search-form button:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+.catalog-search-status {
+    color: var(--text-secondary);
+    font-size: 11px;
+    margin-bottom: 12px;
+}
+
+.catalog-search-status[data-type="success"] {
+    color: var(--primary);
+}
+
+.catalog-search-status[data-type="error"] {
+    color: #b42318;
+}
+
+.catalog-search-results {
+    display: grid;
+    gap: 10px;
+}
+
+.catalog-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    padding: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--off-white);
+}
+
+.catalog-result-information {
+    min-width: 0;
+}
+
+.catalog-result-information > strong {
+    color: var(--primary);
+    font-size: 12px;
+}
+
+.catalog-result-information h4 {
+    margin: 4px 0;
+    color: var(--text-primary);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.catalog-result-information p {
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+.catalog-result-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 7px;
+}
+
+.catalog-result-meta span {
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: var(--sage);
+    color: var(--primary-secondary);
+    font-size: 10px;
+}
+
+.catalog-select-button {
+    flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+    .catalog-search-form {
+        flex-direction: column;
+    }
+
+    .catalog-result {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .catalog-select-button {
+        width: 100%;
+    }
+}

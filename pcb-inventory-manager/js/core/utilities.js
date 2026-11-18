@@ -1,5 +1,5 @@
-
 import { appState } from "./state.js";
+import { convertFromPHP } from "../services/currency.js";
 
 export function generateID(prefix = "PCB") {
     const timestamp = Date.now().toString(36).toUpperCase();
@@ -12,8 +12,12 @@ export function generateID(prefix = "PCB") {
     return `${prefix}-${timestamp}-${random}`;
 }
 
-export function formatCurrency(amount, currency = appState.settings?.currency || "PHP") {
+export function formatCurrency(
+    amount,
+    currency = appState.settings?.currency || "PHP"
+) {
     const value = Number(amount) || 0;
+    const convertedValue = convertFromPHP(value, currency);
 
     try {
         return new Intl.NumberFormat("en-PH", {
@@ -21,7 +25,7 @@ export function formatCurrency(amount, currency = appState.settings?.currency ||
             currency,
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
-        }).format(value);
+        }).format(convertedValue);
     } catch (error) {
         return new Intl.NumberFormat("en-PH", {
             style: "currency",
@@ -55,7 +59,10 @@ export function escapeHTML(value) {
 }
 
 export function validatePositiveNumber(value) {
-    return Number.isFinite(Number(value)) && Number(value) >= 0;
+    return (
+        Number.isFinite(Number(value)) &&
+        Number(value) >= 0
+    );
 }
 
 export function getStockStatus(stock, minimumStock) {
@@ -83,7 +90,9 @@ export function calculateInventoryValue(inventory) {
 }
 
 export function calculatePercentage(part, total) {
-    if (!total) return 0;
+    if (!total) {
+        return 0;
+    }
 
     return (Number(part) / Number(total)) * 100;
 }

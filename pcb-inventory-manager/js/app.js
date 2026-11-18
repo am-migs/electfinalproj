@@ -1,3 +1,4 @@
+
 import { appState } from "./core/state.js";
 import { initializeNavigation } from "./core/navigation.js";
 import { formatCurrency } from "./core/utilities.js";
@@ -8,6 +9,7 @@ import { initializeBOM } from "./modules/bom.js";
 import { initializePinout } from "./modules/pinout.js";
 import { initializeAnalytics } from "./modules/analytics.js";
 import { initializeSettings } from "./modules/settings.js";
+import { initializeCatalogSearch } from "./modules/catalog-search.js";
 
 import { initializeImportExport } from "./services/import-export.js";
 import { initializeNotifications } from "./services/notifications.js";
@@ -41,10 +43,13 @@ function initializeApplication() {
         initializeBarcodeLabels();
         initializeDataManagement();
 
+        const catalogSearch = initializeCatalogSearch();
+
         window.PCBManager = {
             name: APP_NAME,
             state: appState,
             navigation,
+            catalogSearch,
             formatCurrency,
 
             getInventory() {
