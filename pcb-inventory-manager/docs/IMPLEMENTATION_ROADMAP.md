@@ -1,132 +1,83 @@
-# PCB Component BOM & Inventory Manager — Implementation Roadmap
+# PCB Manager — Development Progress
 
-## Product direction
+**Last reviewed:** 18 November 2026  
+**Active application:** React + Vite in `pcb-inventory-manager/src`
 
-Build a full-featured, multi-user electronics component inventory and PCB procurement platform using the existing React + Vite frontend and Supabase/PostgreSQL backend.
+## Current state
 
-Preserve the current green palette and existing working workflows. Extend the current application rather than replacing it without a migration plan.
+The project has moved from a browser-only prototype to a React application with Supabase authentication and organization-scoped cloud data access. The Vite entry point loads `src/main.jsx`; the older vanilla-JavaScript application remains in the repository as legacy material and is not part of the active build.
 
-## Repository audit (18 November 2026)
+## Progress by phase
 
-### Existing frontend
+### 1. Frontend foundation — mostly complete
+- [x] React 19 + Vite 6 application and responsive green-themed interface
+- [x] Dashboard, inventory, stock history, BOM manager, pinout inspector, analytics, and settings
+- [x] CSV import/export, JSON backup/restore, and printable labels
+- [x] JLCParts catalogue lookup and inventory form prefill
+- [ ] Automated unit tests and browser end-to-end tests
+- [ ] Manual desktop, tablet, and mobile acceptance testing
 
-- React 19 + Vite 6.
-- Tailwind CSS 4 Vite plugin and Lucide React.
-- Main application: `src/App.jsx`.
-- Styling: `src/styles.css`.
-- JLCParts catalogue service: `js/services/jlcparts.js`.
-- Current persistence: LocalStorage key `pcbManagerReactV2`.
-- Existing build command: `npm run build`.
+### 2. Supabase database — schema implemented
+- [x] Organization-scoped schema for profiles, organizations, memberships, components, suppliers, projects, BOM items, stock movements, purchase orders, and activity logs
+- [x] Foreign-key constraints, indexes, updated-at triggers, and RLS policies
+- [x] Automatic personal workspace creation on registration
+- [x] Profile preferences migration
+- [ ] Apply/verify migrations on the live Supabase project
+- [ ] Test owner, admin, editor, and viewer access with separate accounts
 
-### Existing capabilities observed in source
+### 3. Authentication and cloud workspace — implemented, live verification pending
+- [x] Environment-based Supabase client
+- [x] Registration, sign-in, sign-out, session persistence, password reset, and password update
+- [x] Organization membership lookup and role-aware editing
+- [x] Cloud loading and synchronization for components, projects, BOM lines, movements, and profile preferences
+- [x] LocalStorage-to-cloud migration for the current browser
+- [ ] Live test authentication, RLS, CRUD, migration, and recovery links
+- [ ] Improve conflict handling and make multi-table saves transactional
 
-- Dashboard summary and low-stock indicators.
-- Component create, edit, delete, search, category filter, and sorting.
-- Stock-in, stock-out, initial-stock, and stock-correction history.
-- CSV inventory import/export and JSON backup/restore.
-- Project and BOM line management, designators, cost estimate, shortage list, and BOM CSV export.
-- JLCParts published catalogue search and inventory form prefill.
-- Pinout reference lists for ESP32 DevKit V1 and ATmega328P DIP-28.
-- Inventory analytics, printable text labels, and display settings.
+### 4. Inventory and BOM expansion — partially complete
+- [x] Component records, stock adjustments, immutable movement history, BOM costs, and shortage calculations
+- [ ] Structured storage locations and supplier associations
+- [ ] BOM CSV import and KiCad import
+- [ ] Stock reservation/release and BOM revision history
 
-### Known gaps and risks
+### 5. Sourcing and procurement — catalogue lookup implemented
+- [x] Search the published JLCParts catalogue and prefill component details
+- [ ] Multi-select catalogue import and duplicate matching by MPN/LCSC
+- [ ] Supplier management screens
+- [ ] Purchase orders, receiving, and stock receipt transactions
+- [ ] Catalogue source timestamps and stale-data indicators
 
-- No Supabase client or database integration exists yet.
-- LocalStorage data is isolated to one browser and is not shared between users/devices.
-- No authentication, organization membership UI, or server-side authorization flow exists.
-- No automated tests or CI verification were confirmed during this audit.
-- The JLCParts integration searches a published catalogue index/shards; it is not a full catalogue synchronization service and does not guarantee live price/stock.
-- CSV/BOM import, backup recovery, stock operations, and live catalogue behavior need browser-level tests.
-- The legacy non-React workspace is not automatically migrated into the current React LocalStorage schema.
+### 6. Reporting and release readiness — partially complete
+- [x] Inventory valuation, category summaries, project BOM cost, CSV reports, and printable labels
+- [x] GitHub Actions production build workflow
+- [x] Vercel deployment configured for the `pcb-inventory-manager` root directory
+- [ ] Automated backups and documented recovery testing
+- [ ] QR/barcode labels and activity-log UI
+- [ ] Production environment verification, RLS review, and user acceptance testing
 
-## Target architecture
+## Recent development milestones
 
-- Frontend: React + Vite.
-- Authentication: Supabase Auth.
-- Database: Supabase PostgreSQL.
-- Authorization: PostgreSQL Row Level Security (RLS), scoped by organization.
-- Catalogue: existing JLCParts service, with explicit import and refresh workflows.
-- Deployment: static frontend hosting plus Supabase managed backend.
-- Secrets: frontend publishable/anon key only; never expose service-role credentials.
+- Established the React + Vite application and retained the original vanilla-JavaScript prototype as legacy source.
+- Added the Supabase PostgreSQL schema, organization membership, RLS, and automatic personal workspaces.
+- Integrated email/password authentication and cloud workspace synchronization.
+- Corrected Supabase environment configuration and missing client exports.
+- Added persistence for user preferences and restored stock movement before/after values.
+- Corrected queued synchronization, password recovery, whole-number stock validation, and low-stock preference behavior.
+- Verified successful GitHub Actions production builds for the fixes.
 
-## Phases
+## Release blockers / next actions
 
-### Phase 1 — Audit and stabilize the current application
+1. Apply both migrations to the Supabase project; if the first migration was already run manually, apply only the second migration in SQL Editor.
+2. Confirm Vercel has the two required Vite environment variables and redeploy.
+3. Test sign-up/email confirmation, sign-in, password recovery, and sign-out.
+4. Test RLS with different roles and verify that one user's data cannot be accessed by another organization.
+5. Test inventory, stock history, BOM, backups, and LocalStorage migration in a real browser.
+6. Add automated tests and resolve any issues found before treating the app as production-ready.
 
-- [x] Inspect current frontend, persistence model, JLCParts service, and README.
-- [x] Record current features and known limitations.
-- [ ] Run production build and resolve compile errors.
-- [ ] Add automated tests for stock calculations, BOM calculations, CSV parsing, and backup validation.
-- [ ] Manually verify core workflows in the browser.
+## Known technical limitations
 
-### Phase 2 — Supabase database foundation
-
-- [x] Design organization-scoped PostgreSQL schema.
-- [x] Add profiles, organizations, organization_members, components, suppliers, projects, bom_items, stock_movements, purchase_orders, purchase_order_items, and activity_logs.
-- [x] Add indexes, updated-at triggers, initial profile/workspace creation, and RLS policies.
-- [ ] Apply migration to a real Supabase project.
-- [ ] Validate policies using owner, editor, and viewer accounts.
-
-Migration: `supabase/migrations/202611180001_initial_schema.sql`.
-
-### Phase 3 — Supabase client and authentication
-
-- [ ] Add `@supabase/supabase-js`.
-- [ ] Add environment variable configuration and client initialization.
-- [ ] Add sign-up, sign-in, sign-out, password reset, and session persistence.
-- [ ] Add profile and organization/workspace selection.
-- [ ] Add role-aware navigation and actions.
-- [ ] Add loading, empty, offline, and authentication error states.
-
-### Phase 4 — Cloud data access and LocalStorage migration
-
-- [ ] Create typed/reusable data-access modules for each domain.
-- [ ] Replace direct LocalStorage writes with authenticated database operations.
-- [ ] Preserve LocalStorage as a temporary migration source and optional offline cache only if conflict handling is designed.
-- [ ] Build an explicit import wizard with preview, duplicate detection, validation, and confirmation.
-- [ ] Migrate components, projects, BOM items, and stock movement history.
-- [ ] Verify row counts and totals before marking migration complete.
-
-### Phase 5 — Inventory and BOM workflows
-
-- [ ] Add manufacturer, package, footprint, datasheet, LCSC/JLCPCB identifiers, and supplier metadata.
-- [ ] Add structured storage locations.
-- [ ] Add BOM import adapters (starting with documented CSV formats, then KiCad exports).
-- [ ] Add matching by MPN/LCSC number and unmatched-line review.
-- [ ] Add stock reservation and release tied to projects.
-- [ ] Add BOM readiness, shortages, and purchase planning.
-- [ ] Add BOM revision history.
-
-### Phase 6 — JLCParts sourcing and procurement
-
-- [ ] Verify upstream catalogue format, license/terms, refresh cadence, and download sizes.
-- [ ] Add multi-select import of search results.
-- [ ] Match catalogue entries to existing components without duplicate MPN/LCSC records.
-- [ ] Store source and last-checked timestamps for catalogue-derived values.
-- [ ] Refresh price/availability only where upstream data supports it; clearly label stale or unavailable data.
-- [ ] Add suppliers, purchase orders, receiving, and stock receipt transactions.
-- [ ] Do not attempt an unrestricted full catalogue mirror until feasibility and upstream terms are verified.
-
-### Phase 7 — Reporting, operations, and deployment
-
-- [ ] Add inventory valuation, usage, purchase, and project reports.
-- [ ] Add QR/barcode labels.
-- [ ] Add audit/activity history and exportable reports.
-- [ ] Add automated backups and documented recovery.
-- [ ] Add CI build/test workflow.
-- [ ] Deploy frontend and configure production auth redirects and environment variables.
-- [ ] Complete security review, RLS tests, responsive tests, and user acceptance testing.
-
-## Data integrity rules
-
-- Quantities are integers and cannot become negative.
-- Prices use PostgreSQL numeric types, not floating-point arithmetic.
-- Component MPN is unique within an organization.
-- BOM lines cannot reference components from another organization.
-- Stock changes must create an immutable movement record with before/after quantities.
-- Receiving a purchase order must update stock through a single validated transaction.
-- User permissions must be enforced by RLS, not only by hiding buttons in the UI.
-
-## Current implementation status
-
-The initial Supabase schema has been committed on the `feature/supabase-foundation` branch. The frontend still runs on LocalStorage until the Supabase project is configured and the authentication/data-access phases are implemented.
+- Cloud synchronization uses sequential Supabase requests rather than a single database transaction; partial failures and simultaneous edits need additional handling.
+- The application currently uses a personal workspace per registered user; a multi-organization workspace switcher is not implemented.
+- Supplier and purchase-order database tables are ahead of the UI; those workflows are not yet available.
+- JLCParts is a published external dataset, not a guaranteed live pricing or availability API.
+- Currency preference affects formatting only, not conversion of stored prices.
