@@ -125,7 +125,7 @@ create table if not exists public.purchase_orders (
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  foreign key (supplier_id, organization_id) references public.suppliers(id, organization_id) on delete set null,
+  foreign key (supplier_id, organization_id) references public.suppliers(id, organization_id) on delete restrict,
   unique (organization_id, order_number),
   unique (id, organization_id)
 );
