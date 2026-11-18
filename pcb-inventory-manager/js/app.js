@@ -16,9 +16,19 @@ import { initializeNotifications } from "./services/notifications.js";
 import { initializeReports } from "./services/reports.js";
 import { initializeBarcodeLabels } from "./services/barcode.js";
 import { initializeCurrency } from "./services/currency.js";
-import { initializeDataManagement } from "./services/data-management.js";
 
 const APP_NAME = "PCB Component BOM & Inventory Manager";
+
+function initializeIcons() {
+    if (
+        window.lucide &&
+        typeof window.lucide.createIcons === "function"
+    ) {
+        window.lucide.createIcons();
+    } else {
+        console.warn("Lucide icons could not be loaded.");
+    }
+}
 
 function initializeApplication() {
     console.log(`${APP_NAME} is initializing...`);
@@ -41,9 +51,10 @@ function initializeApplication() {
         initializeNotifications();
         initializeReports();
         initializeBarcodeLabels();
-        initializeDataManagement();
 
         const catalogSearch = initializeCatalogSearch();
+
+        initializeIcons();
 
         window.PCBManager = {
             name: APP_NAME,
@@ -108,6 +119,7 @@ function initializeApplication() {
         initializeCurrency();
 
         console.log(`${APP_NAME} initialized successfully.`);
+
     } catch (error) {
         console.error("Application initialization failed:", error);
 
