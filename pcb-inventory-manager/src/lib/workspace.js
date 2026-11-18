@@ -161,7 +161,7 @@ export async function syncCloudWorkspace(organizationId, user, next, previous) {
     fail(lookupError);
     const storedIds = new Set((alreadyStored || []).map(row => row.id));
     const movementsToInsert = newMovements.filter(item => !storedIds.has(item.id));
-    if (!movementsToInsert.length) return;
+    if (movementsToInsert.length) {
     const partMap = new Map(currentParts.map(part => [part.id, part]));
     const { error } = await client.from("stock_movements").insert(movementsToInsert.map(item => ({
       id: item.id, organization_id: organizationId, component_id: item.partId,
@@ -172,6 +172,7 @@ export async function syncCloudWorkspace(organizationId, user, next, previous) {
       created_at: item.date || new Date().toISOString()
     })));
     fail(error);
+    }
   }
 
   const oldLineIds = (before.projects || []).flatMap(project => (project.items || []).map(line => line.id));
