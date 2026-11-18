@@ -1,16 +1,20 @@
 
 import { appState, updateState } from "../core/state.js";
+
 import {
     generateID,
     formatCurrency,
     escapeHTML,
-    getStockStatus,
-    calculateInventoryValue
+    getStockStatus
 } from "../core/utilities.js";
 
-// =====================================================
-// INVENTORY CONFIGURATION
-// =====================================================
+import { refreshDashboard } from "./dashboard.js";
+
+/*
+|--------------------------------------------------------------------------
+| INVENTORY CONFIGURATION
+|--------------------------------------------------------------------------
+*/
 
 const LEGACY_STORAGE_KEY = "pcbManagerInventory";
 
@@ -38,17 +42,20 @@ const PACKAGES = [
 ];
 
 let editingComponentId = null;
+let inventoryEventsInitialized = false;
 
-// =====================================================
-// DATA MIGRATION AND NORMALIZATION
-// =====================================================
+/*
+|--------------------------------------------------------------------------
+| DATA NORMALIZATION
+|--------------------------------------------------------------------------
+*/
 
 function normalizeComponent(component) {
     return {
         id: component.id || generateID("CMP"),
-        mpn: String(component.mpn || ""),
-        name: String(component.name || ""),
-        manufacturer: String(component.manufacturer || ""),
+        mpn: String(component.mpn || "").trim(),
+        name: String(component.name || "").trim(),
+        manufacturer: String(component.manufacturer || "").trim(),
         category: String(component.category || "Other"),
         packageType: String(component.packageType || "Other"),
         footprint: String(component.footprint || ""),
@@ -61,6 +68,15 @@ function normalizeComponent(component) {
         updatedAt: component.updatedAt || new Date().toISOString()
     };
 }
+
+/*
+|--------------------------------------------------------------------------
+| LEGACY DATA MIGRATION
+|--------------------------------------------------------------------------
+| Transfers data from the original LocalStorage key to the
+| modular application's centralized state.
+|--------------------------------------------------------------------------
+*/
 
 function migrateLegacyInventory() {
     if (appState.inventory.length > 0) return;
@@ -81,21 +97,32 @@ function migrateLegacyInventory() {
         console.info(
             `Migrated ${appState.inventory.length} inventory records.`
         );
+
     } catch (error) {
         console.error("Inventory migration failed:", error);
     }
 }
 
+/*
+|--------------------------------------------------------------------------
+| SAVE INVENTORY
+|--------------------------------------------------------------------------
+*/
+
 function saveInventory() {
     return updateState("inventory", appState.inventory);
 }
 
-// =====================================================
-// INVENTORY HELPERS
-// =====================================================
+/*
+|--------------------------------------------------------------------------
+| INVENTORY HELPERS
+|--------------------------------------------------------------------------
+*/
 
 function getComponentById(id) {
-    return appState.inventory.find(component => component.id === id);
+    return appState.inventory.find(
+        component => component.id === id
+    );
 }
 
 function getSafeDatasheetURL(url) {
@@ -112,6 +139,7 @@ function getSafeDatasheetURL(url) {
         }
 
         return parsedURL.href;
+
     } catch {
         return "";
     }
@@ -122,10 +150,24 @@ function getCurrentCurrency() {
 }
 
 function getComponentStatus(component) {
-    return getStockStatus(component.stock, component.minStock);
+    return getStockStatus(
+        component.stock,
+        component.minStock
+    );
 }
 
-function recordStockMovement(component, previousStock, newStock, reason) {
+/*
+|--------------------------------------------------------------------------
+| STOCK MOVEMENT HISTORY
+|--------------------------------------------------------------------------
+*/
+
+function recordStockMovement(
+    component,
+    previousStock,
+    newStock,
+    reason
+) {
     const movement = {
         id: generateID("MOV"),
         componentId: component.id,
@@ -138,17 +180,25 @@ function recordStockMovement(component, previousStock, newStock, reason) {
         date: new Date().toISOString()
     };
 
-    appState.stockMovements.unshift(movement);
+    const previousMovements = [...appState.stockMovements];
 
-    // Keep the latest 500 movement records.
-    appState.stockMovements = appState.stockMovements.slice(0, 500);
+    appState.stockMovements = [
+        movement,
+        ...previousMovements
+    ].slice(0, 500);
 
-    updateState("stockMovements", appState.stockMovements);
+    if (!updateState("stockMovements", appState.stockMovements)) {
+        appState.stockMovements = previousMovements;
+
+        console.error("Unable to save stock movement history.");
+    }
 }
 
-// =====================================================
-// MODAL CREATION
-// =====================================================
+/*
+|--------------------------------------------------------------------------
+| COMPONENT MODAL CREATION
+|--------------------------------------------------------------------------
+*/
 
 function createComponentModal() {
     if (document.getElementById("component-modal")) return;
@@ -160,7 +210,8 @@ function createComponentModal() {
     modal.hidden = true;
 
     modal.innerHTML = `
-        <div class="modal" role="dialog"
+        <div class="modal"
+             role="dialog"
              aria-modal="true"
              aria-labelledby="component-modal-title">
 
@@ -191,6 +242,7 @@ function createComponentModal() {
                             Manufacturer Part Number
                             <span class="form-required">*</span>
                         </label>
+
                         <input id="component-mpn"
                                name="mpn"
                                type="text"
@@ -203,6 +255,7 @@ function createComponentModal() {
                             Component Name
                             <span class="form-required">*</span>
                         </label>
+
                         <input id="component-name"
                                name="name"
                                type="text"
@@ -215,6 +268,7 @@ function createComponentModal() {
                             Manufacturer
                             <span class="form-required">*</span>
                         </label>
+
                         <input id="component-manufacturer"
                                name="manufacturer"
                                type="text"
@@ -224,6 +278,7 @@ function createComponentModal() {
 
                     <div class="form-group">
                         <label for="component-category">Category</label>
+
                         <select id="component-category"
                                 name="category"
                                 required>
@@ -237,6 +292,7 @@ function createComponentModal() {
 
                     <div class="form-group">
                         <label for="component-package">Package</label>
+
                         <select id="component-package"
                                 name="packageType"
                                 required>
@@ -250,6 +306,7 @@ function createComponentModal() {
 
                     <div class="form-group">
                         <label for="component-footprint">Footprint</label>
+
                         <input id="component-footprint"
                                name="footprint"
                                type="text"
@@ -257,7 +314,10 @@ function createComponentModal() {
                     </div>
 
                     <div class="form-group">
-                        <label for="component-location">Storage Location</label>
+                        <label for="component-location">
+                            Storage Location
+                        </label>
+
                         <input id="component-location"
                                name="location"
                                type="text"
@@ -269,6 +329,7 @@ function createComponentModal() {
                             Unit Price (PHP)
                             <span class="form-required">*</span>
                         </label>
+
                         <input id="component-price"
                                name="unitPrice"
                                type="number"
@@ -283,6 +344,7 @@ function createComponentModal() {
                             Stock Quantity
                             <span class="form-required">*</span>
                         </label>
+
                         <input id="component-stock"
                                name="stock"
                                type="number"
@@ -296,6 +358,7 @@ function createComponentModal() {
                         <label for="component-min-stock">
                             Minimum Stock Level
                         </label>
+
                         <input id="component-min-stock"
                                name="minStock"
                                type="number"
@@ -309,17 +372,22 @@ function createComponentModal() {
                         <label for="component-datasheet">
                             Datasheet URL
                         </label>
+
                         <input id="component-datasheet"
                                name="datasheet"
                                type="url"
                                placeholder="https://example.com/datasheet.pdf">
-                        <small>Enter a valid HTTP or HTTPS link.</small>
+
+                        <small>
+                            Enter a valid HTTP or HTTPS link.
+                        </small>
                     </div>
 
                 </div>
 
                 <div class="modal-footer">
                     <div class="button-group">
+
                         <button type="button"
                                 class="btn btn-secondary"
                                 id="cancel-component">
@@ -331,6 +399,7 @@ function createComponentModal() {
                                 id="save-component">
                             Save Component
                         </button>
+
                     </div>
                 </div>
 
@@ -339,11 +408,17 @@ function createComponentModal() {
     `;
 
     document.body.appendChild(modal);
+
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 }
 
-// =====================================================
-// MODAL CONTROLS
-// =====================================================
+/*
+|--------------------------------------------------------------------------
+| MODAL CONTROLS
+|--------------------------------------------------------------------------
+*/
 
 function openComponentModal(component = null) {
     const modal = document.getElementById("component-modal");
@@ -417,9 +492,78 @@ function closeComponentModal() {
     editingComponentId = null;
 }
 
-// =====================================================
-// SAVE COMPONENT
-// =====================================================
+/*
+|--------------------------------------------------------------------------
+| COMPONENT FORM VALIDATION
+|--------------------------------------------------------------------------
+*/
+
+function validateComponentData(componentData) {
+    if (
+        !componentData.mpn ||
+        !componentData.name ||
+        !componentData.manufacturer
+    ) {
+        alert("Please complete all required component information.");
+        return false;
+    }
+
+    if (
+        !Number.isFinite(componentData.unitPrice) ||
+        componentData.unitPrice < 0
+    ) {
+        alert("Please enter a valid non-negative unit price.");
+        return false;
+    }
+
+    if (
+        !Number.isInteger(componentData.stock) ||
+        componentData.stock < 0
+    ) {
+        alert("Stock quantity must be a non-negative whole number.");
+        return false;
+    }
+
+    if (
+        !Number.isInteger(componentData.minStock) ||
+        componentData.minStock < 0
+    ) {
+        alert("Minimum stock must be a non-negative whole number.");
+        return false;
+    }
+
+    const safeDatasheet = getSafeDatasheetURL(
+        componentData.datasheet
+    );
+
+    if (componentData.datasheet && !safeDatasheet) {
+        alert(
+            "Please provide a valid HTTP or HTTPS datasheet URL."
+        );
+
+        return false;
+    }
+
+    componentData.datasheet = safeDatasheet;
+
+    const duplicate = appState.inventory.some(component =>
+        component.mpn.toLowerCase() === componentData.mpn.toLowerCase() &&
+        component.id !== editingComponentId
+    );
+
+    if (duplicate) {
+        alert("A component with this MPN already exists.");
+        return false;
+    }
+
+    return true;
+}
+
+/*
+|--------------------------------------------------------------------------
+| SAVE COMPONENT
+|--------------------------------------------------------------------------
+*/
 
 function handleComponentSubmit(event) {
     event.preventDefault();
@@ -434,57 +578,52 @@ function handleComponentSubmit(event) {
         ? getComponentById(editingComponentId)
         : null;
 
+    if (wasEditing && !previousComponent) {
+        alert("The component could not be found.");
+        return;
+    }
+
     const formData = new FormData(form);
 
     const componentData = {
-        mpn: String(formData.get("mpn")).trim(),
-        name: String(formData.get("name")).trim(),
-        manufacturer: String(formData.get("manufacturer")).trim(),
-        category: String(formData.get("category")),
-        packageType: String(formData.get("packageType")),
-        footprint: String(formData.get("footprint") || "").trim(),
-        location: String(formData.get("location") || "").trim(),
+        mpn: String(formData.get("mpn") || "").trim(),
+        name: String(formData.get("name") || "").trim(),
+        manufacturer: String(
+            formData.get("manufacturer") || ""
+        ).trim(),
+
+        category: String(formData.get("category") || "Other"),
+        packageType: String(
+            formData.get("packageType") || "Other"
+        ),
+
+        footprint: String(
+            formData.get("footprint") || ""
+        ).trim(),
+
+        location: String(
+            formData.get("location") || ""
+        ).trim(),
+
         unitPrice: Number(formData.get("unitPrice")),
         stock: Number(formData.get("stock")),
         minStock: Number(formData.get("minStock")),
-        datasheet: String(formData.get("datasheet") || "").trim()
+
+        datasheet: String(
+            formData.get("datasheet") || ""
+        ).trim()
     };
 
-    if (
-        !Number.isFinite(componentData.unitPrice) ||
-        componentData.unitPrice < 0 ||
-        !Number.isInteger(componentData.stock) ||
-        componentData.stock < 0 ||
-        !Number.isInteger(componentData.minStock) ||
-        componentData.minStock < 0
-    ) {
-        alert("Please enter valid prices and stock quantities.");
-        return;
-    }
-
-    const safeDatasheet = getSafeDatasheetURL(componentData.datasheet);
-
-    if (componentData.datasheet && !safeDatasheet) {
-        alert("Please provide a valid HTTP or HTTPS datasheet URL.");
-        return;
-    }
-
-    componentData.datasheet = safeDatasheet;
-
-    const duplicate = appState.inventory.some(component =>
-        component.mpn.toLowerCase() === componentData.mpn.toLowerCase() &&
-        component.id !== editingComponentId
-    );
-
-    if (duplicate) {
-        alert("A component with this MPN already exists.");
-        return;
-    }
+    if (!validateComponentData(componentData)) return;
 
     const now = new Date().toISOString();
 
-    if (wasEditing && previousComponent) {
-        const updatedComponent = {
+    const previousInventory = [...appState.inventory];
+
+    let savedComponent;
+
+    if (wasEditing) {
+        savedComponent = {
             ...previousComponent,
             ...componentData,
             updatedAt: now
@@ -492,45 +631,57 @@ function handleComponentSubmit(event) {
 
         appState.inventory = appState.inventory.map(component =>
             component.id === editingComponentId
-                ? updatedComponent
+                ? savedComponent
                 : component
         );
 
-        if (previousComponent.stock !== componentData.stock) {
-            recordStockMovement(
-                updatedComponent,
-                previousComponent.stock,
-                componentData.stock,
-                "Manual component update"
-            );
-        }
     } else {
-        const newComponent = {
+        savedComponent = {
             id: generateID("CMP"),
             ...componentData,
             createdAt: now,
             updatedAt: now
         };
 
-        appState.inventory.unshift(newComponent);
-
-        if (newComponent.stock > 0) {
-            recordStockMovement(
-                newComponent,
-                0,
-                newComponent.stock,
-                "Initial inventory entry"
-            );
-        }
+        appState.inventory = [
+            savedComponent,
+            ...appState.inventory
+        ];
     }
 
     if (!saveInventory()) {
-        alert("Unable to save inventory. Check your browser storage.");
+        appState.inventory = previousInventory;
+
+        alert(
+            "Unable to save inventory. Check your browser storage."
+        );
+
         return;
     }
 
+    if (
+        wasEditing &&
+        previousComponent.stock !== savedComponent.stock
+    ) {
+        recordStockMovement(
+            savedComponent,
+            previousComponent.stock,
+            savedComponent.stock,
+            "Manual component update"
+        );
+
+    } else if (!wasEditing && savedComponent.stock > 0) {
+        recordStockMovement(
+            savedComponent,
+            0,
+            savedComponent.stock,
+            "Initial inventory entry"
+        );
+    }
+
     closeComponentModal();
-    renderInventory();
+
+    refreshInventory();
 
     alert(
         wasEditing
@@ -539,20 +690,35 @@ function handleComponentSubmit(event) {
     );
 }
 
-// =====================================================
-// INVENTORY TABLE
-// =====================================================
+/*
+|--------------------------------------------------------------------------
+| INVENTORY TABLE
+|--------------------------------------------------------------------------
+*/
 
 function renderInventory() {
-    const tableBody = document.getElementById("inventory-table-body");
+    const tableBody = document.getElementById(
+        "inventory-table-body"
+    );
 
     if (!tableBody) return;
 
-    const searchInput = document.getElementById("inventory-search");
-    const categoryFilter = document.getElementById("category-filter");
-    const packageFilter = document.getElementById("package-filter");
+    const searchInput = document.getElementById(
+        "inventory-search"
+    );
 
-    const searchTerm = searchInput?.value.trim().toLowerCase() || "";
+    const categoryFilter = document.getElementById(
+        "category-filter"
+    );
+
+    const packageFilter = document.getElementById(
+        "package-filter"
+    );
+
+    const searchTerm = (
+        searchInput?.value || ""
+    ).trim().toLowerCase();
+
     const selectedCategory = categoryFilter?.value || "";
     const selectedPackage = packageFilter?.value || "";
 
@@ -560,19 +726,30 @@ function renderInventory() {
         const matchesSearch = [
             component.mpn,
             component.name,
-            component.manufacturer
-        ].some(value => String(value).toLowerCase().includes(searchTerm));
+            component.manufacturer,
+            component.location
+        ].some(value =>
+            String(value || "").toLowerCase().includes(searchTerm)
+        );
 
         const matchesCategory =
-            !selectedCategory || component.category === selectedCategory;
+            !selectedCategory ||
+            component.category === selectedCategory;
 
         const matchesPackage =
-            !selectedPackage || component.packageType === selectedPackage;
+            !selectedPackage ||
+            component.packageType === selectedPackage;
 
-        return matchesSearch && matchesCategory && matchesPackage;
+        return (
+            matchesSearch &&
+            matchesCategory &&
+            matchesPackage
+        );
     });
 
-    const countElement = document.getElementById("inventory-count");
+    const countElement = document.getElementById(
+        "inventory-count"
+    );
 
     if (countElement) {
         countElement.textContent =
@@ -598,31 +775,56 @@ function renderInventory() {
             .toLowerCase()
             .replaceAll(" ", "-");
 
-        const datasheetURL = getSafeDatasheetURL(component.datasheet);
+        const datasheetURL = getSafeDatasheetURL(
+            component.datasheet
+        );
 
         return `
             <tr>
                 <td>
                     <div class="component-name">
-                        <strong>${escapeHTML(component.mpn)}</strong>
-                        <span>${escapeHTML(component.name)}</span>
+                        <strong>
+                            ${escapeHTML(component.mpn)}
+                        </strong>
+
+                        <span>
+                            ${escapeHTML(component.name)}
+                        </span>
                     </div>
                 </td>
 
-                <td>${escapeHTML(component.manufacturer)}</td>
+                <td>
+                    ${escapeHTML(component.manufacturer)}
+                </td>
 
-                <td>${escapeHTML(component.category)}</td>
+                <td>
+                    ${escapeHTML(component.category)}
+                </td>
 
                 <td>
                     ${escapeHTML(component.packageType)}
-                    ${component.footprint
-                        ? `<span class="table-subtext">${escapeHTML(component.footprint)}</span>`
-                        : ""}
+
+                    ${
+                        component.footprint
+                            ? `
+                                <span class="table-subtext">
+                                    ${escapeHTML(component.footprint)}
+                                </span>
+                            `
+                            : ""
+                    }
                 </td>
 
-                <td>${escapeHTML(component.location || "—")}</td>
+                <td>
+                    ${escapeHTML(component.location || "—")}
+                </td>
 
-                <td>${formatCurrency(component.unitPrice, getCurrentCurrency())}</td>
+                <td>
+                    ${formatCurrency(
+                        component.unitPrice,
+                        getCurrentCurrency()
+                    )}
+                </td>
 
                 <td>
                     <strong>${component.stock}</strong>
@@ -636,15 +838,20 @@ function renderInventory() {
 
                 <td>
                     <div class="table-actions">
-                        ${datasheetURL ? `
-                            <a class="action-button view"
-                               href="${escapeHTML(datasheetURL)}"
-                               target="_blank"
-                               rel="noopener noreferrer"
-                               title="View datasheet">
-                                <i data-lucide="file-text"></i>
-                            </a>
-                        ` : ""}
+
+                        ${
+                            datasheetURL
+                                ? `
+                                    <a class="action-button view"
+                                       href="${escapeHTML(datasheetURL)}"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       title="View datasheet">
+                                        <i data-lucide="file-text"></i>
+                                    </a>
+                                `
+                                : ""
+                        }
 
                         <button type="button"
                                 class="action-button stock"
@@ -669,6 +876,7 @@ function renderInventory() {
                                 title="Delete component">
                             <i data-lucide="trash-2"></i>
                         </button>
+
                     </div>
                 </td>
             </tr>
@@ -680,9 +888,11 @@ function renderInventory() {
     }
 }
 
-// =====================================================
-// STOCK ADJUSTMENT
-// =====================================================
+/*
+|--------------------------------------------------------------------------
+| STOCK ADJUSTMENT
+|--------------------------------------------------------------------------
+*/
 
 function adjustStock(componentId) {
     const component = getComponentById(componentId);
@@ -696,10 +906,18 @@ function adjustStock(componentId) {
 
     if (input === null) return;
 
+    if (input.trim() === "") {
+        alert("Please enter a stock quantity.");
+        return;
+    }
+
     const newStock = Number(input);
 
     if (!Number.isInteger(newStock) || newStock < 0) {
-        alert("Please enter a valid non-negative whole number.");
+        alert(
+            "Please enter a valid non-negative whole number."
+        );
+
         return;
     }
 
@@ -707,12 +925,17 @@ function adjustStock(componentId) {
 
     if (previousStock === newStock) return;
 
+    const previousUpdatedAt = component.updatedAt;
+
     component.stock = newStock;
     component.updatedAt = new Date().toISOString();
 
     if (!saveInventory()) {
         component.stock = previousStock;
+        component.updatedAt = previousUpdatedAt;
+
         alert("Unable to save the stock adjustment.");
+
         return;
     }
 
@@ -723,12 +946,14 @@ function adjustStock(componentId) {
         "Manual stock adjustment"
     );
 
-    renderInventory();
+    refreshInventory();
 }
 
-// =====================================================
-// DELETE COMPONENT
-// =====================================================
+/*
+|--------------------------------------------------------------------------
+| DELETE COMPONENT
+|--------------------------------------------------------------------------
+*/
 
 function deleteComponent(componentId) {
     const component = getComponentById(componentId);
@@ -750,136 +975,46 @@ function deleteComponent(componentId) {
 
     if (!saveInventory()) {
         appState.inventory = previousInventory;
+
         alert("Unable to delete the component.");
-        return;
-    }
-
-    renderInventory();
-}
-
-// =====================================================
-// DASHBOARD DATA
-// =====================================================
-
-function renderDashboardInventory() {
-    const totalComponents = document.getElementById("total-components");
-    const totalUnits = document.getElementById("total-units");
-    const lowStock = document.getElementById("low-stock");
-    const inventoryValue = document.getElementById("inventory-value");
-
-    const components = appState.inventory;
-
-    const units = components.reduce(
-        (total, component) => total + component.stock,
-        0
-    );
-
-    const lowStockCount = components.filter(component =>
-        component.stock <= component.minStock
-    ).length;
-
-    const value = calculateInventoryValue(components);
-
-    if (totalComponents) {
-        totalComponents.textContent = components.length;
-    }
-
-    if (totalUnits) {
-        totalUnits.textContent = units.toLocaleString("en-PH");
-    }
-
-    if (lowStock) {
-        lowStock.textContent = lowStockCount;
-    }
-
-    if (inventoryValue) {
-        inventoryValue.textContent = formatCurrency(
-            value,
-            getCurrentCurrency()
-        );
-    }
-
-    renderRecentInventory();
-    renderDashboardAlerts();
-}
-
-function renderRecentInventory() {
-    const container = document.getElementById("recent-inventory");
-
-    if (!container) return;
-
-    const recentComponents = [...appState.inventory]
-        .sort((a, b) =>
-            new Date(b.createdAt) - new Date(a.createdAt)
-        )
-        .slice(0, 5);
-
-    if (recentComponents.length === 0) {
-        container.innerHTML = `
-            <p class="empty-state">No inventory records yet.</p>
-        `;
 
         return;
     }
 
-    container.innerHTML = recentComponents.map(component => `
-        <div class="recent-item">
-            <div>
-                <strong>${escapeHTML(component.mpn)}</strong>
-                <span>${escapeHTML(component.name)}</span>
-            </div>
+    refreshInventory();
 
-            <strong>${component.stock} units</strong>
-        </div>
-    `).join("");
+    alert("Component deleted successfully.");
 }
 
-function renderDashboardAlerts() {
-    const container = document.getElementById("dashboard-alerts");
-
-    if (!container) return;
-
-    const alerts = appState.inventory
-        .filter(component => component.stock <= component.minStock)
-        .sort((a, b) => a.stock - b.stock)
-        .slice(0, 5);
-
-    if (alerts.length === 0) {
-        container.innerHTML = `
-            <p class="empty-state">No stock alerts. Everything looks good!</p>
-        `;
-
-        return;
-    }
-
-    container.innerHTML = alerts.map(component => `
-        <div class="alert-item">
-            <div>
-                <strong>${escapeHTML(component.mpn)}</strong>
-                <span>${escapeHTML(component.name)}</span>
-            </div>
-
-            <span class="alert-quantity">
-                ${component.stock} / ${component.minStock}
-            </span>
-        </div>
-    `).join("");
-}
-
-// =====================================================
-// EVENT LISTENERS
-// =====================================================
+/*
+|--------------------------------------------------------------------------
+| INVENTORY EVENT LISTENERS
+|--------------------------------------------------------------------------
+*/
 
 function initializeInventoryEvents() {
-    const addButton = document.getElementById("add-component-button");
-    const form = document.getElementById("component-form");
-    const modal = document.getElementById("component-modal");
+    if (inventoryEventsInitialized) return;
+
+    const addButton = document.getElementById(
+        "add-component-button"
+    );
+
+    const form = document.getElementById(
+        "component-form"
+    );
+
+    const modal = document.getElementById(
+        "component-modal"
+    );
 
     addButton?.addEventListener("click", () => {
         openComponentModal();
     });
 
-    form?.addEventListener("submit", handleComponentSubmit);
+    form?.addEventListener(
+        "submit",
+        handleComponentSubmit
+    );
 
     document.getElementById("close-component-modal")
         ?.addEventListener("click", closeComponentModal);
@@ -914,7 +1049,9 @@ function initializeInventoryEvents() {
 
     document.getElementById("inventory-table-body")
         ?.addEventListener("click", event => {
-            const button = event.target.closest("[data-action]");
+            const button = event.target.closest(
+                "[data-action]"
+            );
 
             if (!button) return;
 
@@ -937,32 +1074,59 @@ function initializeInventoryEvents() {
                 deleteComponent(componentId);
             }
         });
+
+    inventoryEventsInitialized = true;
 }
 
-// =====================================================
-// MODULE INITIALIZATION
-// =====================================================
+/*
+|--------------------------------------------------------------------------
+| MODULE INITIALIZATION
+|--------------------------------------------------------------------------
+*/
 
 export function initializeInventory() {
     migrateLegacyInventory();
 
-    appState.inventory = appState.inventory.map(normalizeComponent);
+    appState.inventory = appState.inventory.map(
+        normalizeComponent
+    );
 
-    saveInventory();
+    if (!saveInventory()) {
+        console.warn(
+            "Inventory initialization could not save normalized data."
+        );
+    }
 
     createComponentModal();
+
     initializeInventoryEvents();
 
     renderInventory();
-    renderDashboardInventory();
 
-    console.log("Inventory module initialized.");
+    console.log("Inventory module initialized successfully.");
+
+    return true;
 }
+
+/*
+|--------------------------------------------------------------------------
+| REFRESH INVENTORY
+|--------------------------------------------------------------------------
+| Refreshes the inventory table and the separate dashboard module.
+|--------------------------------------------------------------------------
+*/
 
 export function refreshInventory() {
     renderInventory();
-    renderDashboardInventory();
+
+    refreshDashboard();
 }
+
+/*
+|--------------------------------------------------------------------------
+| PUBLIC INVENTORY ACCESS
+|--------------------------------------------------------------------------
+*/
 
 export function getInventory() {
     return [...appState.inventory];
