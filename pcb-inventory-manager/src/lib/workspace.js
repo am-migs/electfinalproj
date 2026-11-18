@@ -102,3 +102,102 @@ export async function deleteCloudComponent(organizationId, componentId) {
     .delete().eq("organization_id", organizationId).eq("id", componentId);
   fail(error);
 }
+
+const movementTypes = {
+  "Initial stock": "initial_stock", "Stock in": "stock_in",
+  "Stock out": "stock_out", "Stock correction": "adjustment",
+  "Reservation": "reservation", "Release": "release", "Consumption": "consumption"
+};
+
+export async function syncCloudWorkspace(organizationId, user, next, previous) {
+  const client = requireSupabase();
+  const before = previous || defaults;
+  const changed = (a, b) => JSON.stringify(a) !== JSON.stringify(b);
+  const currentParts = next.inventory || [];
+  const currentProjects = next.projects || [];
+  const currentMovements = next.movements || [];
+
+  if (currentParts.length) {
+    const payload = currentParts.map(part => ({
+      id: part.id, organization_id: organizationId, mpn: part.mpn, name: part.name,
+      manufacturer: part.manufacturer || "", category: part.category || "Other",
+      package_type: part.packageType || "Other", footprint: part.footprint || "",
+      storage_location: part.location || "", unit_price: Number(part.unitPrice || 0),
+      currency: next.settings?.currency || "PHP", stock: Number(part.stock || 0),
+      minimum_stock: Number(part.minStock || 0), datasheet_url: part.datasheet || null,
+      lcsc_part_number: part.lcsc || null, jlcpcb_part_number: part.jlcpcb || null,
+      updated_by: user.id
+    }));
+    const { error } = await client.from("components").upsert(payload, { onConflict: "id" });
+    fail(error);
+  }
+
+  const changedProjects = currentProjects.filter(project =>
+    changed(project, (before.projects || []).find(old => old.id === project.id))
+  );
+  if (changedProjects.length) {
+    const { error } = await client.from("projects").upsert(changedProjects.map(project => ({
+      id: project.id, organization_id: organizationId, name: project.name,
+      description: project.description || "", created_by: user.id
+    })), { onConflict: "id" });
+    fail(error);
+  }
+
+  const currentLines = currentProjects.flatMap(project => (project.items || []).map(line => ({
+    id: line.id, organization_id: organizationId, project_id: project.id,
+    component_id: line.partId, quantity: Number(line.quantity),
+    designators: String(line.designators || "").split(",").map(value => value.trim()).filter(Boolean),
+    notes: line.notes || ""
+  })));
+  if (currentLines.length) {
+    const { error } = await client.from("bom_items").upsert(currentLines, { onConflict: "id" });
+    fail(error);
+  }
+
+  const previousMovementIds = new Set((before.movements || []).map(item => item.id));
+  const newMovements = currentMovements.filter(item => !previousMovementIds.has(item.id));
+  if (newMovements.length) {
+    const partMap = new Map(currentParts.map(part => [part.id, part]));
+    const { error } = await client.from("stock_movements").insert(newMovements.map(item => ({
+      id: item.id, organization_id: organizationId, component_id: item.partId,
+      movement_type: movementTypes[item.type] || "adjustment",
+      quantity: Math.max(1, Number(item.quantity || 1)),
+      quantity_before: 0, quantity_after: Number(partMap.get(item.partId)?.stock || 0),
+      note: item.note || "", created_by: user.id,
+      created_at: item.date || new Date().toISOString()
+    })));
+    fail(error);
+  }
+
+  const oldLineIds = (before.projects || []).flatMap(project => (project.items || []).map(line => line.id));
+  const newLineIds = new Set(currentLines.map(line => line.id));
+  const removedLineIds = oldLineIds.filter(id => !newLineIds.has(id));
+  if (removedLineIds.length) {
+    const { error } = await client.from("bom_items").delete()
+      .eq("organization_id", organizationId).in("id", removedLineIds);
+    fail(error);
+  }
+
+  const newProjectIds = new Set(currentProjects.map(project => project.id));
+  const removedProjectIds = (before.projects || []).filter(project => !newProjectIds.has(project.id)).map(project => project.id);
+  if (removedProjectIds.length) {
+    const { error } = await client.from("projects").delete()
+      .eq("organization_id", organizationId).in("id", removedProjectIds);
+    fail(error);
+  }
+
+  const newPartIds = new Set(currentParts.map(part => part.id));
+  const removedPartIds = (before.inventory || []).filter(part => !newPartIds.has(part.id)).map(part => part.id);
+  if (removedPartIds.length) {
+    const { error } = await client.from("components").delete()
+      .eq("organization_id", organizationId).in("id", removedPartIds);
+    fail(error);
+  }
+
+  if (changed(next.profile, before.profile) && next.profile) {
+    const { error } = await client.from("profiles").update({
+      full_name: next.profile.name || "", email: next.profile.email || ""
+    }).eq("id", user.id);
+    fail(error);
+  }
+}
