@@ -8,7 +8,7 @@ import {
 import { searchComponents, getCatalogueInformation } from "../js/services/jlcparts.js";
 import AuthScreen from "./components/AuthScreen.jsx";
 import { isSupabaseConfigured, supabase } from "./lib/supabase.js";
-import { getUserWorkspace, loadCloudWorkspace } from "./lib/workspace.js";
+import { getUserWorkspace, loadCloudWorkspace, syncCloudWorkspace } from "./lib/workspace.js";
 
 const STORE_KEY = "pcbManagerReactV2";
 const blankPart = {
@@ -25,7 +25,7 @@ const nav = [
   ["Dashboard", LayoutDashboard], ["Inventory", Boxes], ["BOM Manager", FileSpreadsheet],
   ["Pinout Inspector", Cpu], ["Analytics", ChartNoAxesCombined], ["Settings", Settings]
 ];
-const makeId = () => globalThis.crypto?.randomUUID?.() || String(Date.now()) + Math.random().toString(16).slice(2);
+const makeId = () => globalThis.crypto?.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 3 | 8)).toString(16); });
 const money = (n, currency) => {
   try { return new Intl.NumberFormat("en-PH", { style: "currency", currency: currency || "PHP" }).format(Number(n) || 0); }
   catch { return "₱" + (Number(n) || 0).toFixed(2); }
@@ -71,6 +71,9 @@ function WorkspaceApp({ user, organization, role, onSignOut }) {
   const [db, setDb] = useState(initial);
   const [cloudLoading, setCloudLoading] = useState(true);
   const [cloudError, setCloudError] = useState("");
+  const [cloudReady, setCloudReady] = useState(false);
+  const cloudSnapshot = useRef(null);
+  const cloudQueue = useRef(Promise.resolve());
   const [page, setPage] = useState("Dashboard");
   const [form, setForm] = useState(blankPart);
   const [editing, setEditing] = useState(null);
@@ -100,12 +103,12 @@ function WorkspaceApp({ user, organization, role, onSignOut }) {
     let active = true;
     setCloudLoading(true);
     loadCloudWorkspace(organization.id, user).then(data => {
-      if (active) { setDb(data); setCloudError(""); }
+      if (active) { setDb(data); cloudSnapshot.current = data; setCloudError(""); setCloudReady(true); }
     }).catch(error => { if (active) setCloudError(error.message || "Unable to load cloud workspace."); })
       .finally(() => { if (active) setCloudLoading(false); });
     return () => { active = false; };
   }, [organization.id, user]);
-  useEffect(() => { getCatalogueInformation().then(setCatalogInfo).catch(() => {}); }, []);
+  useEffect(() => { getCatalogueInformation().then(setCatalogInfo).catch(() => {}); }, []);\n  useEffect(() => {\n    if (!cloudReady || !cloudSnapshot.current) return;\n    if (!["owner", "admin", "editor"].includes(role)) return;\n    const snapshot = db;\n    const previous = cloudSnapshot.current;\n    if (snapshot === previous) return;\n    cloudQueue.current = cloudQueue.current.then(() =>\n      syncCloudWorkspace(organization.id, user, snapshot, previous)\n    ).then(() => { cloudSnapshot.current = snapshot; setCloudError(""); })\n      .catch(error => { setCloudError("Cloud save failed: " + (error.message || "Unknown database error")); });\n  }, [db, cloudReady, organization.id, user, role]);
 
   const inventory = db.inventory || [];
   const projects = db.projects || [];
@@ -121,7 +124,7 @@ function WorkspaceApp({ user, organization, role, onSignOut }) {
     if (sort === "value") return (Number(b.stock) * Number(b.unitPrice)) - (Number(a.stock) * Number(a.unitPrice));
     return String(a[sort] || "").localeCompare(String(b[sort] || ""));
   }), [inventory, query, category, sort]);
-  const update = patch => setDb(old => ({ ...old, ...patch }));
+  const update = patch => {\n    if (!["owner", "admin", "editor"].includes(role)) { alert("Your workspace role is read-only. Ask an administrator for edit access."); return; }\n    setDb(old => ({ ...old, ...patch }));\n  };
   const resetPartForm = () => { setEditing(null); setForm(blankPart); };
   const savePart = event => {
     event.preventDefault();
@@ -310,7 +313,7 @@ function WorkspaceApp({ user, organization, role, onSignOut }) {
   const body = page === "Dashboard" ? renderDashboard() : page === "Inventory" ? renderInventory() : page === "BOM Manager" ? renderBom() : page === "Pinout Inspector" ? renderPinout() : page === "Analytics" ? renderAnalytics() : renderSettings();
   if (cloudLoading) return <main className="auth-shell"><section className="auth-card"><h2>Loading your workspace…</h2><p>Connecting to your organization cloud inventory.</p></section></main>;
   if (cloudError) return <main className="auth-shell"><section className="auth-card"><h2>Unable to load workspace</h2><p className="auth-alert error">{cloudError}</p><button className="auth-submit" onClick={onSignOut}>Sign out</button></section></main>;
-  return <div className="shell"><aside className="side"><div className="brand"><div className="mark">PCB</div><div><b>PCB Manager</b><small style={{ display:"block" }}>Component workspace</small></div></div><nav className="nav">{nav.map(([name,Icon])=><button key={name} className={page===name?"active":""} onClick={()=>setPage(name)}><Icon size={17}/>{name}</button>)}</nav><small>PCB Component BOM & Inventory Manager<br/>Supabase cloud · {role}</small></aside><div className="main"><header className="top"><h1>{page}</h1><div className="user"><div className="avatar">{(db.profile.name||"A").slice(0,2).toUpperCase()}</div><b>{db.profile.name}</b><button className="btn alt" onClick={onSignOut}>Sign out</button></div></header><main className="content">{body}</main><footer className="footer"><span>PCB Component BOM & Inventory Manager</span><span>Antonio Miguel L. Lacanlale · BSCPE 3A</span></footer></div></div>;
+  return <div className="shell"><aside className="side"><div className="brand"><div className="mark">PCB</div><div><b>PCB Manager</b><small style={{ display:"block" }}>Component workspace</small></div></div><nav className="nav">{nav.map(([name,Icon])=><button key={name} className={page===name?"active":""} onClick={()=>setPage(name)}><Icon size={17}/>{name}</button>)}</nav><small>PCB Component BOM & Inventory Manager<br/>Supabase cloud · {role}</small></aside><div className="main"><header className="top"><h1>{page}</h1><div className="user"><div className="avatar">{(db.profile.name||"A").slice(0,2).toUpperCase()}</div><b>{db.profile.name}</b><button className="btn alt" onClick={onSignOut}>Sign out</button></div></header><main className="content">{body}</main><footer className="footer"><span>PCB Component BOM & Inventory Manager · Cloud workspace</span><span>{organization.name} · {role} · Antonio Miguel L. Lacanlale · BSCPE 3A</span></footer></div></div>;
 }
 
 }
