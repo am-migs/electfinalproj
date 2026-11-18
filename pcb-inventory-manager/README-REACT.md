@@ -1,72 +1,77 @@
-# PCB Component BOM & Inventory Manager — React + Vite
+# PCB Component BOM & Inventory Manager
 
-## Stack
-- React 19 and Vite 6
-- Tailwind CSS 4 Vite plugin
+A web application for managing electronic components, stock, PCB project bills of materials, and sourcing references.
+
+## Technology
+
+- React 19, Vite 6, JavaScript
+- Supabase Auth and PostgreSQL with Row Level Security
 - Lucide React icons
-- Browser LocalStorage persistence
-- JLCParts open-source catalogue data integration
+- JLCParts published catalogue data
+- Vercel deployment
 
 ## Run locally
+
 ```bash
+cd pcb-inventory-manager
 npm install
+cp .env.example .env.local
 npm run dev
 ```
-Open the local URL printed by Vite.
 
-## Production build
+Add the Supabase project URL and publishable key to `.env.local`. Never use a service-role/secret key in frontend variables.
+
+Production build:
+
 ```bash
 npm run build
 npm run preview
 ```
 
-## Implemented React modules
-- **Dashboard:** component count, total stock units, low-stock alerts, inventory valuation, recently updated items, and recent stock movements.
-- **Inventory:** add, edit, delete, duplicate-MPN validation, search, category filtering, sorting, package/footprint/location/datasheet fields, and LocalStorage persistence.
-- **Stock control:** stock-in and stock-out adjustments, insufficient-stock validation, movement history, and minimum-stock indicators. Initial stock, CSV-imported stock, and stock corrections made while editing a component are recorded.
-- **CSV:** inventory CSV import (duplicate MPNs are skipped; UTF-8 BOM headers are supported), inventory CSV export, BOM CSV export, and inventory report export.
-- **JLCParts catalogue:** search published open-source catalogue records by LCSC number, manufacturer, or description; select a result to prefill the inventory form.
-- **BOM manager:** create and delete projects, add inventory parts, quantities and designators, edit BOM lines, remove lines, calculate estimated BOM costs, identify shortages, and export BOM CSV.
-- **Pinout inspector:** searchable ESP32 DevKit V1 and ATmega328P DIP-28 reference pin lists.
-- **Analytics:** inventory valuation, stock by category, component-level value, project BOM cost overview, and CSV report export.
-- **Settings:** editable administrator profile, display-currency preference, low-stock dashboard preference, JSON backup export, JSON backup restore, and workspace reset.
-- **Labels:** printable component labels generated through the browser print dialog.
+## Implemented features
 
-## JLCParts catalogue integration
-The integration reuses `js/services/jlcparts.js`. JLCParts is an open-source published catalogue/data project, not a conventional REST API. The service retrieves the published manifest, search index, and relevant catalogue shards, then searches records in the browser. First use may download sizeable data files. Availability depends on the upstream catalogue, network access, and browser gzip decompression support.
+- **Authentication:** email/password registration and sign-in, sign-out, password reset, and password update.
+- **Cloud workspace:** organization-scoped data, role-aware editing, and Supabase synchronization.
+- **Dashboard:** component count, stock units, low-stock alerts, inventory value, recent inventory, and stock movements.
+- **Inventory:** add/edit/delete, MPN duplicate checks, search, category filters, sorting, component details, and storage location.
+- **Stock control:** stock-in/out, initial stock, stock corrections, quantity validation, and movement history.
+- **BOM manager:** projects, BOM lines, designators, required quantities, estimated cost, shortages, and CSV export.
+- **Catalogue:** JLCParts search and inventory form prefill.
+- **Pinout inspector:** searchable ESP32 DevKit V1 and ATmega328P DIP-28 reference lists.
+- **Analytics and exports:** inventory valuation, category summaries, project cost overview, CSV exports, printable labels, and JSON backup/restore.
+- **Preferences:** display currency and low-stock alerts, stored in the user's profile.
 
-- Project: https://github.com/yaqwsx/jlcparts
-- Live catalogue: https://yaqwsx.github.io/jlcparts/
+## Project structure
 
-No API key is required. Catalogue search must be tested with a live connection before a presentation or demonstration.
+- `src/App.jsx` — active React application
+- `src/components/AuthScreen.jsx` — authentication and password recovery
+- `src/lib/` — Supabase client, authentication helpers, and cloud workspace data access
+- `src/styles.css` — active React styles
+- `js/services/jlcparts.js` — catalogue data service reused by React
+- `supabase/migrations/` — database schema and preference migrations
+- `docs/` — setup, integration, roadmap, and project documentation
 
-## Data and migration
-The React workspace uses LocalStorage key `pcbManagerReactV2`. The legacy vanilla-JavaScript workspace is not automatically migrated. Export legacy data before switching if you need to retain it; the React settings page can restore a compatible JSON backup, but the legacy backup schema should be checked before restoring.
+The older vanilla-JavaScript modules in `js/app.js`, `js/script.js`, and `js/modules/` are retained as legacy project material. They are not loaded by the current Vite entry point (`src/main.jsx`).
 
-## Current scope and limitations
-- This is a frontend application. Data is stored in the current browser and is not synchronized between users or devices.
-- Currency selection changes the currency display format only. It does not convert existing stored prices or fetch live exchange rates.
-- Printable labels are basic text labels; QR/barcode generation is not included in this React version.
-- Pinout content is a reference list, not an interactive electrical schematic or board-layout tool.
-- JLCParts does not guarantee real-time pricing or stock availability.
-- Live catalogue search, CSV import edge cases, backup restoration, and browser print behavior require manual browser testing on the target machine.
+## Important setup
 
-## Suggested verification before submission
-1. Add, edit, delete, search, sort, and filter inventory records.
-2. Adjust stock in and out; verify movement history and low-stock indicators.
-3. Import/export CSV and export/restore a JSON backup.
-4. Create a project, add BOM lines/designators, edit quantities, and verify costs/shortages.
-5. Test JLCParts search while online.
-6. Run `npm run build` and test the responsive layout in a browser.
+1. Apply both SQL migrations in order, or use the Supabase CLI on a fresh project.
+2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` locally and in Vercel.
+3. Configure Supabase Auth Site URL and redirect URLs.
+4. Test registration, confirmation, login, password recovery, role permissions, data sync, and local-data migration.
 
+See [Supabase setup](docs/SUPABASE_SETUP.md) and [Project documentation](docs/PROJECT_DOCUMENTATION.md).
 
-## Supabase migration (in progress)
+## Limitations
 
-The project direction is now a full multi-user application backed by Supabase and PostgreSQL. The current React frontend still uses LocalStorage; cloud authentication and persistence are not active yet.
+- Live Supabase authentication, RLS, and data synchronization still require end-to-end testing against the deployed database.
+- Supplier and purchase-order tables exist in the schema, but corresponding management screens and receiving workflows are not implemented.
+- JLCParts is an external published dataset; catalogue freshness, price, and stock availability are not guaranteed.
+- Currency selection changes display formatting only; it does not convert stored prices or fetch exchange rates.
+- Pinout references cover only two board/device families and are not electrical design tools.
+- No automated unit, integration, or browser end-to-end test suite is currently included.
+- Multi-organization switching, BOM import/revision history, reservations, and QR/barcode labels remain future work.
 
-- [Implementation roadmap and repository audit](docs/IMPLEMENTATION_ROADMAP.md)
-- [Supabase project setup](docs/SUPABASE_SETUP.md)
-- Initial organization-scoped database migration: `supabase/migrations/202611180001_initial_schema.sql`
-- Environment template: `.env.example`
+## Build status
 
-Do not add real Supabase credentials to Git. Configure them locally in `.env.local` after creating the Supabase project. The service-role key must never be exposed to the browser.
+The GitHub Actions production build passed after the Supabase and application fixes. A successful build does not replace live Supabase, browser, or deployment testing.
