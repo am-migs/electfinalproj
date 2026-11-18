@@ -1,18 +1,27 @@
 
 import { appState } from "./core/state.js";
+
 import { initializeNavigation } from "./core/navigation.js";
+
 import { formatCurrency } from "./core/utilities.js";
+
 import { initializeInventory } from "./modules/inventory.js";
 
-// =====================================================
-// APPLICATION CONFIGURATION
-// =====================================================
+import { initializeDashboard } from "./modules/dashboard.js";
+
+/*
+|--------------------------------------------------------------------------
+| Application Configuration
+|--------------------------------------------------------------------------
+*/
 
 const APP_NAME = "PCB Component BOM & Inventory Manager";
 
-// =====================================================
-// APPLICATION INITIALIZATION
-// =====================================================
+/*
+|--------------------------------------------------------------------------
+| Initialize Application
+|--------------------------------------------------------------------------
+*/
 
 function initializeApplication() {
     console.log(`${APP_NAME} is initializing...`);
@@ -22,13 +31,26 @@ function initializeApplication() {
         const navigation = initializeNavigation();
 
         if (!navigation) {
-            throw new Error("Navigation initialization failed.");
+            throw new Error(
+                "Navigation initialization failed."
+            );
         }
 
-        // Initialize Inventory Catalog.
+        // Initialize inventory functionality.
         initializeInventory();
 
-        // Shared application interface.
+        // Initialize dashboard displays.
+        initializeDashboard();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Global Application Access
+        |--------------------------------------------------------------------------
+        | Provides convenient access to application information
+        | through the browser console during development.
+        |--------------------------------------------------------------------------
+        */
+
         window.PCBManager = {
             name: APP_NAME,
 
@@ -51,10 +73,15 @@ function initializeApplication() {
             }
         };
 
-        console.log(`${APP_NAME} initialized successfully.`);
+        console.log(
+            `${APP_NAME} initialized successfully.`
+        );
 
     } catch (error) {
-        console.error("Application initialization failed:", error);
+        console.error(
+            "Application initialization failed:",
+            error
+        );
 
         alert(
             "The application encountered an error during startup. " +
@@ -63,9 +90,11 @@ function initializeApplication() {
     }
 }
 
-// =====================================================
-// START APPLICATION
-// =====================================================
+/*
+|--------------------------------------------------------------------------
+| DOM Ready Handler
+|--------------------------------------------------------------------------
+*/
 
 if (document.readyState === "loading") {
     document.addEventListener(
