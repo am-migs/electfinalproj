@@ -6,6 +6,9 @@ import {
   FolderPlus, FileDown, History, Filter, RotateCcw
 } from "lucide-react";
 import { searchComponents, getCatalogueInformation } from "../js/services/jlcparts.js";
+import AuthScreen from "./components/AuthScreen.jsx";
+import { isSupabaseConfigured, supabase } from "./lib/supabase.js";
+import { getUserWorkspace, loadCloudWorkspace, syncCloudWorkspace } from "./lib/workspace.js";
 
 const STORE_KEY = "pcbManagerReactV2";
 const blankPart = {
@@ -22,7 +25,7 @@ const nav = [
   ["Dashboard", LayoutDashboard], ["Inventory", Boxes], ["BOM Manager", FileSpreadsheet],
   ["Pinout Inspector", Cpu], ["Analytics", ChartNoAxesCombined], ["Settings", Settings]
 ];
-const makeId = () => globalThis.crypto?.randomUUID?.() || String(Date.now()) + Math.random().toString(16).slice(2);
+const makeId = () => globalThis.crypto?.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 3 | 8)).toString(16); });
 const money = (n, currency) => {
   try { return new Intl.NumberFormat("en-PH", { style: "currency", currency: currency || "PHP" }).format(Number(n) || 0); }
   catch { return "₱" + (Number(n) || 0).toFixed(2); }
@@ -64,8 +67,14 @@ function parseCSV(text) {
   const headers = rows.shift().map(h => (h.charCodeAt(0) === 0xFEFF ? h.slice(1) : h).trim().toLowerCase());
   return rows.map(values => Object.fromEntries(headers.map((h, i) => [h, values[i] ?? ""])));
 }
-export default function App() {
-  const [db, setDb] = useState(loadWorkspace);
+function WorkspaceApp({ user, organization, role, onSignOut }) {
+  const [db, setDb] = useState(initial);
+  const [cloudLoading, setCloudLoading] = useState(true);
+  const [cloudError, setCloudError] = useState("");
+  const [cloudReady, setCloudReady] = useState(false);
+  const [legacyAvailable, setLegacyAvailable] = useState(false);
+  const cloudSnapshot = useRef(null);
+  const cloudQueue = useRef(Promise.resolve());
   const [page, setPage] = useState("Dashboard");
   const [form, setForm] = useState(blankPart);
   const [editing, setEditing] = useState(null);
@@ -91,8 +100,27 @@ export default function App() {
   const restoreRef = useRef(null);
   const [historyFilter, setHistoryFilter] = useState("All");
 
-  useEffect(() => { localStorage.setItem(STORE_KEY, JSON.stringify(db)); }, [db]);
-  useEffect(() => { getCatalogueInformation().then(setCatalogInfo).catch(() => {}); }, []);
+  useEffect(() => {
+    let active = true;
+    setCloudLoading(true);
+    loadCloudWorkspace(organization.id, user).then(data => {
+      if (active) { setDb(data); cloudSnapshot.current = data; const local = loadWorkspace(); setLegacyAvailable(!data.inventory.length && !data.projects.length && (local.inventory.length > 0 || local.projects.length > 0)); setCloudError(""); setCloudReady(true); }
+    }).catch(error => { if (active) setCloudError(error.message || "Unable to load cloud workspace."); })
+      .finally(() => { if (active) setCloudLoading(false); });
+    return () => { active = false; };
+  }, [organization.id, user]);
+  useEffect(() => { getCatalogueInformation().then(setCatalogInfo).catch(() => {}); }, [] );
+  useEffect(() => {
+    if (!cloudReady || !cloudSnapshot.current) return;
+    if (!["owner", "admin", "editor"].includes(role)) return;
+    const snapshot = db;
+    const previous = cloudSnapshot.current;
+    if (snapshot === previous) return;
+    cloudQueue.current = cloudQueue.current.then(() =>
+      syncCloudWorkspace(organization.id, user, snapshot, previous)
+    ).then(() => { cloudSnapshot.current = snapshot; setCloudError(""); })
+      .catch(error => { setCloudError("Cloud save failed: " + (error.message || "Unknown database error")); });
+  }, [db, cloudReady, organization.id, user, role]);
 
   const inventory = db.inventory || [];
   const projects = db.projects || [];
@@ -108,7 +136,10 @@ export default function App() {
     if (sort === "value") return (Number(b.stock) * Number(b.unitPrice)) - (Number(a.stock) * Number(a.unitPrice));
     return String(a[sort] || "").localeCompare(String(b[sort] || ""));
   }), [inventory, query, category, sort]);
-  const update = patch => setDb(old => ({ ...old, ...patch }));
+  const update = patch => {
+    if (!["owner", "admin", "editor"].includes(role)) { alert("Your workspace role is read-only. Ask an administrator for edit access."); return; }
+    setDb(old => ({ ...old, ...patch }));
+  };
   const resetPartForm = () => { setEditing(null); setForm(blankPart); };
   const savePart = event => {
     event.preventDefault();
@@ -131,6 +162,8 @@ export default function App() {
       partName: part.name,
       type: editing ? "Stock correction" : "Initial stock",
       quantity: Math.abs(stockDifference),
+      quantityBefore: previousStock,
+      quantityAfter: part.stock,
       note: editing
         ? `Component details edited (stock changed from ${previousStock} to ${part.stock}).`
         : "Initial inventory entry",
@@ -148,6 +181,7 @@ export default function App() {
     document.getElementById("component-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
   const deletePart = part => {
+    if (movements.some(move => move.partId === part.id)) return alert("This component has stock movement history and cannot be deleted. Keep it in inventory so its audit history remains intact.");
     if (!confirm("Delete " + part.name + "? This also removes it from BOM lines.")) return;
     update({
       inventory: inventory.filter(x => x.id !== part.id),
@@ -162,7 +196,7 @@ export default function App() {
     if (next < 0) return alert("Insufficient stock. Available quantity: " + part.stock);
     update({
       inventory: inventory.map(x => x.id === part.id ? { ...x, stock: next, updatedAt: new Date().toISOString() } : x),
-      movements: [{ id: makeId(), partId: part.id, partName: part.name, type: movementType, quantity: amount, note: movementNote.trim(), date: new Date().toISOString() }, ...movements]
+      movements: [{ id: makeId(), partId: part.id, partName: part.name, type: movementType, quantity: amount, quantityBefore: Number(part.stock), quantityAfter: next, note: movementNote.trim(), date: new Date().toISOString() }, ...movements]
     });
     setMovementQty("1"); setMovementNote("");
   };
@@ -252,6 +286,20 @@ export default function App() {
     } catch (error) { alert("Unable to import CSV: " + error.message); }
     event.target.value = "";
   };
+  const migrateLocalWorkspace = () => {
+    const legacy = loadWorkspace();
+    if (!legacy.inventory.length && !legacy.projects.length) return alert("No existing local inventory or projects were found.");
+    if (db.inventory.length || db.projects.length) return alert("The cloud workspace already contains data. Migration is disabled to prevent overwriting it.");
+    const idMap = new Map();
+    legacy.inventory.forEach(part => idMap.set(part.id, makeId()));
+    legacy.projects.forEach(project => idMap.set(project.id, makeId()));
+    const inventoryCopy = legacy.inventory.map(part => ({ ...part, id: idMap.get(part.id) }));
+    const projectsCopy = legacy.projects.map(project => ({ ...project, id: idMap.get(project.id), items: (project.items || []).filter(line => idMap.has(line.partId)).map(line => ({ ...line, id: makeId(), partId: idMap.get(line.partId) })) }));
+    const movementsCopy = legacy.movements.filter(move => idMap.has(move.partId)).map(move => ({ ...move, id: makeId(), partId: idMap.get(move.partId) }));
+    update({ inventory: inventoryCopy, projects: projectsCopy, movements: movementsCopy, profile: legacy.profile, settings: legacy.settings });
+    setLegacyAvailable(false);
+    setRestoreMessage("Local data queued for cloud migration. Keep this page open while it synchronizes.");
+  };
   const backup = () => downloadText("pcb-inventory-backup-" + new Date().toISOString().slice(0, 10) + ".json", JSON.stringify({ ...db, exportedAt: new Date().toISOString(), schemaVersion: 2 }, null, 2), "application/json");
   const restoreBackup = async event => {
     const file = event.target.files?.[0]; if (!file) return;
@@ -293,7 +341,53 @@ export default function App() {
     const totalBomCost = projects.reduce((sum,p)=>sum+(p.items||[]).reduce((s,line)=>{const part=inventory.find(x=>x.id===line.partId);return s+(part?Number(line.quantity)*Number(part.unitPrice):0);},0),0);
     return <>{heading("Inventory Analytics", "Stock valuation, category distribution, and project requirements.", <button className="btn alt" onClick={()=>downloadText("inventory-report.csv", [["MPN","Name","Category","Stock","Minimum","Unit Price","Stock Value"].join(","), ...inventory.map(p=>[p.mpn,p.name,p.category,p.stock,p.minStock,p.unitPrice,p.stock*p.unitPrice].map(csvCell).join(","))].join("\n"), "text/csv") }><FileDown size={14}/> Export Report</button>)}<div className="stats">{stat("Inventory Value",money(value,db.settings.currency),Wallet)}{stat("Stock Units",units,Boxes)}{stat("Low / Out of Stock",low.length,AlertTriangle)}{stat("Projects",projects.length,FileSpreadsheet)}</div><section className="panel"><h3>Stock by Category</h3>{byCategory.map(item=><div className="row" key={item.name}><span>{item.name}</span><span>{item.count} units</span></div>)}{!byCategory.length && <div className="empty">Add inventory to see category analytics.</div>}</section><section className="panel"><h3>Inventory Valuation by Component</h3><div className="scroll"><table className="table"><thead><tr><th>Component</th><th>Quantity</th><th>Unit Cost</th><th>Total Value</th></tr></thead><tbody>{inventory.slice().sort((a,b)=>(b.stock*b.unitPrice)-(a.stock*a.unitPrice)).map(part=><tr key={part.id}><td>{part.mpn} · {part.name}</td><td>{part.stock}</td><td>{money(part.unitPrice,db.settings.currency)}</td><td>{money(part.stock*part.unitPrice,db.settings.currency)}</td></tr>)}</tbody></table></div></section><section className="panel"><h3>Project BOM Cost Overview</h3>{projects.map(p=>{const cost=(p.items||[]).reduce((s,line)=>{const part=inventory.find(x=>x.id===line.partId);return s+(part?line.quantity*part.unitPrice:0);},0);return <div className="row" key={p.id}><span>{p.name}</span><b>{money(cost,db.settings.currency)}</b></div>;})}{!projects.length && <div className="empty">Create a project to view BOM cost analysis.</div>}<p className="muted">Combined estimated BOM cost: {money(totalBomCost,db.settings.currency)}</p></section></>;
   };
-  const renderSettings = () => <>{heading("Settings", "Manage your profile, preferences, and local data backups.")}<section className="panel"><h3>Administrator Profile</h3><form className="form" onSubmit={e=>{e.preventDefault();alert("Profile saved.");}}><label>Name<input value={db.profile.name} onChange={e=>update({ profile:{ ...db.profile, name:e.target.value } })}/></label><label>Email<input type="email" value={db.profile.email} onChange={e=>update({ profile:{ ...db.profile, email:e.target.value } })}/></label><div className="wide"><button className="btn"><Save size={14}/> Save Profile</button></div></form></section><section className="panel"><h3>Preferences</h3><label>Display Currency<select className="field" value={db.settings.currency} onChange={e=>update({ settings:{ ...db.settings, currency:e.target.value } })}>{["PHP","USD","EUR","JPY","SGD","GBP","AUD"].map(x=><option key={x}>{x}</option>)}</select></label><p className="muted">Currency changes the display format only. Existing unit prices are not converted. Enter prices in your selected currency.</p><label><input type="checkbox" checked={db.settings.lowStockAlerts} onChange={e=>update({ settings:{ ...db.settings, lowStockAlerts:e.target.checked } })}/> Enable low-stock alerts on dashboard</label></section><section className="panel"><h3>Data Backup and Restore</h3><div className="toolbar"><button className="btn" onClick={backup}><Download size={14}/> Export JSON Backup</button><button className="btn alt" onClick={()=>restoreRef.current?.click()}><Upload size={14}/> Restore JSON Backup</button><input ref={restoreRef} hidden type="file" accept="application/json,.json" onChange={restoreBackup}/></div>{restoreMessage && <p className="muted">{restoreMessage}</p>}<p className="muted">Your data is stored locally in this browser. Export backups regularly. Restoring a backup replaces the current workspace.</p></section><section className="panel"><h3>Workspace Information</h3><div className="row"><span>Inventory records</span><b>{inventory.length}</b></div><div className="row"><span>Projects</span><b>{projects.length}</b></div><div className="row"><span>Stock movements</span><b>{movements.length}</b></div><button className="btn alt" onClick={()=>{if(confirm("Clear all local workspace data? Export a backup first. This cannot be undone.")){setDb(initial);localStorage.removeItem(STORE_KEY);resetPartForm();}}}><RotateCcw size={14}/> Reset Workspace</button></section></>;
+  const renderSettings = () => <>{heading("Settings", "Manage your profile, preferences, and local data backups.")}<section className="panel"><h3>Administrator Profile</h3><form className="form" onSubmit={e=>{e.preventDefault();alert("Profile saved.");}}><label>Name<input value={db.profile.name} onChange={e=>update({ profile:{ ...db.profile, name:e.target.value } })}/></label><label>Email<input type="email" value={db.profile.email} onChange={e=>update({ profile:{ ...db.profile, email:e.target.value } })}/></label><div className="wide"><button className="btn"><Save size={14}/> Save Profile</button></div></form></section><section className="panel"><h3>Preferences</h3><label>Display Currency<select className="field" value={db.settings.currency} onChange={e=>update({ settings:{ ...db.settings, currency:e.target.value } })}>{["PHP","USD","EUR","JPY","SGD","GBP","AUD"].map(x=><option key={x}>{x}</option>)}</select></label><p className="muted">Currency changes the display format only. Existing unit prices are not converted. Enter prices in your selected currency.</p><label><input type="checkbox" checked={db.settings.lowStockAlerts} onChange={e=>update({ settings:{ ...db.settings, lowStockAlerts:e.target.checked } })}/> Enable low-stock alerts on dashboard</label></section><section className="panel"><h3>Cloud Data Migration</h3><p className="muted">Transfer existing LocalStorage records from this browser into your Supabase workspace. This option appears only when the cloud workspace is empty.</p>{legacyAvailable && <button className="btn" onClick={migrateLocalWorkspace}>Migrate existing local data to cloud</button>}{!legacyAvailable && <p className="muted">No pending local migration detected.</p>}</section><section className="panel"><h3>Data Backup and Restore</h3><div className="toolbar"><button className="btn" onClick={backup}><Download size={14}/> Export JSON Backup</button><button className="btn alt" onClick={()=>restoreRef.current?.click()}><Upload size={14}/> Restore JSON Backup</button><input ref={restoreRef} hidden type="file" accept="application/json,.json" onChange={restoreBackup}/></div>{restoreMessage && <p className="muted">{restoreMessage}</p>}<p className="muted">Your inventory, projects, BOM lines, and stock history are stored in your Supabase workspace. Export backups regularly.</p></section><section className="panel"><h3>Workspace Information</h3><div className="row"><span>Inventory records</span><b>{inventory.length}</b></div><div className="row"><span>Projects</span><b>{projects.length}</b></div><div className="row"><span>Stock movements</span><b>{movements.length}</b></div><button className="btn alt" onClick={()=>{if(confirm("Clear all local workspace data? Export a backup first. This cannot be undone.")){setDb(initial);localStorage.removeItem(STORE_KEY);resetPartForm();}}}><RotateCcw size={14}/> Reset Workspace</button></section></>;
   const body = page === "Dashboard" ? renderDashboard() : page === "Inventory" ? renderInventory() : page === "BOM Manager" ? renderBom() : page === "Pinout Inspector" ? renderPinout() : page === "Analytics" ? renderAnalytics() : renderSettings();
-  return <div className="shell"><aside className="side"><div className="brand"><div className="mark">PCB</div><div><b>PCB Manager</b><small style={{ display:"block" }}>Component workspace</small></div></div><nav className="nav">{nav.map(([name,Icon])=><button key={name} className={page===name?"active":""} onClick={()=>setPage(name)}><Icon size={17}/>{name}</button>)}</nav><small>PCB Component BOM & Inventory Manager<br/>React + Vite · Local storage</small></aside><div className="main"><header className="top"><h1>{page}</h1><div className="user"><div className="avatar">{(db.profile.name||"A").slice(0,2).toUpperCase()}</div><b>{db.profile.name}</b></div></header><main className="content">{body}</main><footer className="footer"><span>PCB Component BOM & Inventory Manager</span><span>Antonio Miguel L. Lacanlale · BSCPE 3A</span></footer></div></div>;
+  if (cloudLoading) return <main className="auth-shell"><section className="auth-card"><h2>Loading your workspace…</h2><p>Connecting to your organization cloud inventory.</p></section></main>;
+  if (cloudError) return <main className="auth-shell"><section className="auth-card"><h2>Unable to load workspace</h2><p className="auth-alert error">{cloudError}</p><button className="auth-submit" onClick={onSignOut}>Sign out</button></section></main>;
+  return <div className="shell"><aside className="side"><div className="brand"><div className="mark">PCB</div><div><b>PCB Manager</b><small style={{ display:"block" }}>Component workspace</small></div></div><nav className="nav">{nav.map(([name,Icon])=><button key={name} className={page===name?"active":""} onClick={()=>setPage(name)}><Icon size={17}/>{name}</button>)}</nav><small>PCB Component BOM & Inventory Manager<br/>Supabase cloud · {role}</small></aside><div className="main"><header className="top"><h1>{page}</h1><div className="user"><div className="avatar">{(db.profile.name||"A").slice(0,2).toUpperCase()}</div><b>{db.profile.name}</b><button className="btn alt" onClick={onSignOut}>Sign out</button></div></header><main className="content">{body}</main><footer className="footer"><span>PCB Component BOM & Inventory Manager · Cloud workspace</span><span>{organization.name} · {role} · Antonio Miguel L. Lacanlale · BSCPE 3A</span></footer></div></div>;
+}
+
+export default function App() {
+  const [session, setSession] = useState(null);
+  const [organization, setOrganization] = useState(null);
+  const [role, setRole] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) { setLoading(false); return; }
+    let active = true;
+    supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      if (!active) return;
+      if (sessionError) setError(sessionError.message);
+      setSession(data?.session || null);
+      setLoading(false);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (active) { setSession(nextSession); setOrganization(null); setRole(""); setError(""); }
+    });
+    return () => { active = false; data.subscription.unsubscribe(); };
+  }, []);
+
+  useEffect(() => {
+    if (!session?.user) { setOrganization(null); setRole(""); return; }
+    let active = true;
+    getUserWorkspace(session.user).then(result => {
+      if (active) { setOrganization(result.organization); setRole(result.role); setError(""); }
+    }).catch(err => { if (active) setError(err.message || "Unable to find your workspace."); });
+    return () => { active = false; };
+  }, [session]);
+
+  async function handleSignOut() {
+    const { error: signOutError } = await supabase.auth.signOut();
+    if (signOutError) setError(signOutError.message);
+  }
+
+  if (!isSupabaseConfigured) return <main className="auth-shell"><section className="auth-card"><h1>Supabase setup required</h1><p>Configure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in your .env.local file and Vercel environment variables, then redeploy.</p></section></main>;
+  if (loading) return <main className="auth-shell"><section className="auth-card"><h2>Checking your session…</h2></section></main>;
+  if (!session) return <AuthScreen/>;
+  if (error && !organization) return <main className="auth-shell"><section className="auth-card"><h2>Workspace unavailable</h2><p className="auth-alert error">{error}</p><button className="auth-submit" onClick={handleSignOut}>Sign out</button></section></main>;
+  if (!organization) return <main className="auth-shell"><section className="auth-card"><h2>Preparing your workspace…</h2></section></main>;
+  return <WorkspaceApp user={session.user} organization={organization} role={role} onSignOut={handleSignOut}/>;
 }
