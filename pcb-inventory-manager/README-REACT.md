@@ -23,8 +23,8 @@ npm run preview
 ## Implemented React modules
 - **Dashboard:** component count, total stock units, low-stock alerts, inventory valuation, recently updated items, and recent stock movements.
 - **Inventory:** add, edit, delete, duplicate-MPN validation, search, category filtering, sorting, package/footprint/location/datasheet fields, and LocalStorage persistence.
-- **Stock control:** stock-in and stock-out adjustments, insufficient-stock validation, movement history, and minimum-stock indicators.
-- **CSV:** inventory CSV import (duplicate MPNs are skipped), inventory CSV export, BOM CSV export, and inventory report export.
+- **Stock control:** stock-in and stock-out adjustments, insufficient-stock validation, movement history, and minimum-stock indicators. Initial stock, CSV-imported stock, and stock corrections made while editing a component are recorded.
+- **CSV:** inventory CSV import (duplicate MPNs are skipped; UTF-8 BOM headers are supported), inventory CSV export, BOM CSV export, and inventory report export.
 - **JLCParts catalogue:** search published open-source catalogue records by LCSC number, manufacturer, or description; select a result to prefill the inventory form.
 - **BOM manager:** create and delete projects, add inventory parts, quantities and designators, edit BOM lines, remove lines, calculate estimated BOM costs, identify shortages, and export BOM CSV.
 - **Pinout inspector:** searchable ESP32 DevKit V1 and ATmega328P DIP-28 reference pin lists.
