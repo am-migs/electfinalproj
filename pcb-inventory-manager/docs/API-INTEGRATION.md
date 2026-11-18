@@ -1,52 +1,73 @@
-# Component Catalog API Integration Preparation
 
-## Status
+# Component Catalog Integration
 
-Not connected. This document defines the next integration phase.
+## Selected Data Source
 
-## Recommended provider
+**JLCParts**
 
-Nexar (Octopart API) is a candidate for manufacturer part number searches and component metadata.
+Repository: https://github.com/yaqwsx/jlcparts
 
-Confirm current API access, pricing, quota limits, terms, and returned fields before implementation.
+Live Catalog: https://yaqwsx.github.io/jlcparts/
 
-## Secure request flow
+License: MIT
 
-1. The frontend sends an MPN query to an application-owned endpoint, such as `/api/components/search?mpn=ATmega328P-PU`.
-2. A backend or serverless function validates the query and applies rate limits.
-3. The backend performs OAuth using credentials stored in environment variables.
-4. The backend calls the component catalog provider.
-5. The backend returns only normalized component fields.
-6. The user reviews the result and chooses whether to add it to local inventory.
+## Purpose
 
-## Suggested normalized fields
+JLCParts will serve as the external component data source for the PCB Component BOM & Inventory Manager.
 
-- `mpn`
-- `name`
-- `manufacturer`
-- `description`
-- `datasheet`
-- `packageType`
-- `footprint`
-- `source`
+It provides searchable information about electronic components available through the JLCPCB assembly catalogue.
 
-## Security requirements
+## Planned Features
 
-- Never commit client secrets, API keys, or access tokens.
-- Keep provider credentials on the backend.
-- Validate and rate-limit search requests.
-- Handle timeouts, quotas, and empty results.
-- Treat API results as suggestions and require user confirmation before saving.
+- Search components by manufacturer part number (MPN).
+- Search by LCSC part number or component description.
+- Display component manufacturer and description.
+- Display component category and technical attributes.
+- Retrieve available datasheet links.
+- Display available pricing information.
+- Allow users to review component information before adding it to inventory.
 
-## Existing frontend fields
+## Integration Approach
 
-The inventory form already stores MPN, component name, manufacturer, category, package, footprint, and datasheet URL.
+JLCParts is not a conventional REST API. The application will use its publicly published component catalogue data.
 
-A future lookup control can populate these fields while keeping them editable.
+The integration will:
 
-## Needed before implementation
+1. Retrieve the published catalogue data.
+2. Process and search the component records.
+3. Display matching results in the application.
+4. Allow users to select a component.
+5. Populate the inventory form with the available information.
+6. Require user confirmation before saving the component.
 
-- Provider account and API access.
-- Client ID and secret stored in backend environment variables.
-- Backend or serverless hosting target.
-- Agreed fields and provider usage restrictions.
+## Data Fields
+
+The integration will attempt to retrieve:
+
+- LCSC Part Number
+- Manufacturer
+- Component Description
+- Category
+- Technical Attributes
+- Datasheet URL
+- Product URL
+- Available Price Information
+- Stock Information, when available
+
+## Limitations
+
+- Catalogue coverage is focused on JLCPCB-supported components.
+- Not all electronic components will be available.
+- Pricing and stock information may change.
+- The published catalogue may require downloading and indexing before searching.
+- The integration must respect the source repository's license and data usage conditions.
+
+## Security
+
+No API credentials are required for accessing the publicly published catalogue data.
+
+## Integration Status
+
+Selected: JLCParts
+
+Implementation: Pending
