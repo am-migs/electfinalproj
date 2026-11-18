@@ -1,0 +1,147 @@
+import { updateState } from "../core/state.js";
+
+const VALIDATORS = {
+    inventory: value => Array.isArray(value),
+    projects: value => Array.isArray(value),
+    stockMovements: value => Array.isArray(value),
+    notifications: value => Array.isArray(value),
+    profile: value =>
+        value &&
+        typeof value === "object" &&
+        !Array.isArray(value),
+    settings: value =>
+        value &&
+        typeof value === "object" &&
+        !Array.isArray(value)
+};
+
+function showBackupMessage(message) {
+    const output = document.getElementById("backup-message");
+
+    if (output) {
+        output.textContent = message;
+    }
+}
+
+export async function restoreBackup(file) {
+    if (!file || !file.name.toLowerCase().endsWith(".json")) {
+        throw new Error("Please select a valid JSON backup file.");
+    }
+
+    const backup = JSON.parse(await file.text());
+
+    if (
+        backup?.application !==
+            "PCB Component BOM & Inventory Manager" ||
+        !backup.data ||
+        typeof backup.data !== "object" ||
+        Array.isArray(backup.data)
+    ) {
+        throw new Error("This is not a recognized PCB Manager backup.");
+    }
+
+    const sections = Object.keys(VALIDATORS).filter(section =>
+        Object.prototype.hasOwnProperty.call(
+            backup.data,
+            section
+        )
+    );
+
+    if (!sections.length) {
+        throw new Error("The backup contains no application records.");
+    }
+
+    for (const section of sections) {
+        if (!VALIDATORS[section](backup.data[section])) {
+            throw new Error(
+                `Invalid backup data in section: ${section}`
+            );
+        }
+    }
+
+    const confirmed = window.confirm(
+        "Restore this backup? Existing local application data will be replaced."
+    );
+
+    if (!confirmed) {
+        return false;
+    }
+
+    for (const section of sections) {
+        const saved = updateState(
+            section,
+            backup.data[section]
+        );
+
+        if (!saved) {
+            throw new Error(
+                `Unable to restore ${section}. Check browser storage.`
+            );
+        }
+    }
+
+    window.PCBManager?.refreshAnalytics?.();
+    window.PCBManager?.refreshNotifications?.();
+
+    showBackupMessage("Backup restored successfully.");
+
+    return true;
+}
+
+export function initializeDataManagement() {
+    const exportButton = document.getElementById("settings-export");
+
+    if (
+        !exportButton ||
+        document.getElementById("settings-import")
+    ) {
+        return false;
+    }
+
+    const restoreButton = document.createElement("button");
+
+    restoreButton.type = "button";
+    restoreButton.id = "settings-import";
+    restoreButton.className = "secondary-button";
+    restoreButton.textContent = "Restore Data Backup";
+
+    const fileInput = document.createElement("input");
+
+    fileInput.type = "file";
+    fileInput.accept = ".json,application/json";
+    fileInput.hidden = true;
+
+    exportButton.insertAdjacentElement(
+        "afterend",
+        restoreButton
+    );
+
+    restoreButton.insertAdjacentElement(
+        "afterend",
+        fileInput
+    );
+
+    restoreButton.addEventListener("click", () => {
+        fileInput.click();
+    });
+
+    fileInput.addEventListener("change", async () => {
+        const file = fileInput.files?.[0];
+
+        if (!file) {
+            return;
+        }
+
+        try {
+            await restoreBackup(file);
+        } catch (error) {
+            showBackupMessage(
+                error.message || "Backup restoration failed."
+            );
+        } finally {
+            fileInput.value = "";
+        }
+    });
+
+    return true;
+}

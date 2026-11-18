@@ -1,4 +1,3 @@
-
 import { appState } from "./core/state.js";
 import { initializeNavigation } from "./core/navigation.js";
 import { formatCurrency } from "./core/utilities.js";
@@ -13,6 +12,9 @@ import { initializeSettings } from "./modules/settings.js";
 import { initializeImportExport } from "./services/import-export.js";
 import { initializeNotifications } from "./services/notifications.js";
 import { initializeReports } from "./services/reports.js";
+import { initializeBarcodeLabels } from "./services/barcode.js";
+import { initializeCurrency } from "./services/currency.js";
+import { initializeDataManagement } from "./services/data-management.js";
 
 const APP_NAME = "PCB Component BOM & Inventory Manager";
 
@@ -32,9 +34,12 @@ function initializeApplication() {
         initializePinout();
         initializeAnalytics();
         initializeSettings();
+
         initializeImportExport();
         initializeNotifications();
         initializeReports();
+        initializeBarcodeLabels();
+        initializeDataManagement();
 
         window.PCBManager = {
             name: APP_NAME,
@@ -94,6 +99,8 @@ function initializeApplication() {
                 });
             }
         };
+
+        initializeCurrency();
 
         console.log(`${APP_NAME} initialized successfully.`);
     } catch (error) {

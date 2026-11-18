@@ -1,4 +1,3 @@
-
 import { appState } from "../core/state.js";
 import {
     formatCurrency,
@@ -8,52 +7,26 @@ import {
     calculateInventoryValue
 } from "../core/utilities.js";
 
-let reportsInitialized = false;
-let reportsObserver = null;
+let initialized = false;
+let observer = null;
 
-function getInventory() {
-    return Array.isArray(appState.inventory) ? appState.inventory : [];
-}
+function escapeCSV(value) {
+    const text = String(value ?? "");
 
-function getMovements() {
-    return Array.isArray(appState.stockMovements)
-        ? appState.stockMovements
-        : [];
-}
-
-function getCurrency() {
-    return appState.settings?.currency || "PHP";
-}
-
-function money(value) {
-    return formatCurrency(Number(value) || 0, getCurrency());
-}
-
-function safeDate(value) {
-    if (!value) return "Date unavailable";
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-        return "Date unavailable";
+    if (/[",\r\n]/.test(text)) {
+        return `"${text.replace(/"/g, '""')}"`;
     }
 
-    return formatDate(date);
+    return text;
 }
 
-function csvValue(value) {
-    const text = String(value ?? "");
-    return `"${text.replace(/"/g, '""')}"`;
-}
-
-function downloadCSV(filename, headers, rows) {
-    const content = [
-        headers.map(csvValue).join(","),
-        ...rows.map(row => row.map(csvValue).join(","))
-    ].join("\r\n");
+function downloadCSV(rows, filename) {
+    const csv = "\uFEFF" + rows
+        .map(row => row.map(escapeCSV).join(","))
+        .join("\r\n");
 
     const blob = new Blob(
-        ["\uFEFF" + content],
+        [csv],
         { type: "text/csv;charset=utf-8;" }
     );
 
@@ -62,181 +35,161 @@ function downloadCSV(filename, headers, rows) {
 
     link.href = url;
     link.download = filename;
+
     document.body.appendChild(link);
     link.click();
     link.remove();
 
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    URL.revokeObjectURL(url);
 }
 
 export function exportInventoryReportCSV() {
-    const inventory = getInventory();
-
-    const headers = [
+    const columns = [
         "MPN",
         "Component Name",
         "Manufacturer",
         "Category",
         "Package",
         "Footprint",
-        "Storage Location",
-        "Unit Price",
-        "Stock Quantity",
+        "Location",
+        "Unit Price (PHP)",
+        "Stock",
         "Minimum Stock",
         "Stock Status",
-        "Inventory Value",
+        "Inventory Value (PHP)",
         "Datasheet"
     ];
 
-    const rows = inventory.map(component => {
-        const stock = Number(component.stock) || 0;
-        const price = Number(component.unitPrice) || 0;
-
-        return [
+    const rows = [
+        columns,
+        ...appState.inventory.map(component => [
             component.mpn,
             component.name,
             component.manufacturer,
             component.category,
-            component.package,
+            component.packageType,
             component.footprint,
             component.location,
-            price.toFixed(2),
-            stock,
-            Number(component.minStock) || 0,
-            getStockStatus(stock, component.minStock),
-            (stock * price).toFixed(2),
+            component.unitPrice,
+            component.stock,
+            component.minStock,
+            getStockStatus(component.stock, component.minStock),
+            (Number(component.unitPrice) || 0) *
+                (Number(component.stock) || 0),
             component.datasheet
-        ];
-    });
+        ])
+    ];
 
     downloadCSV(
-        `pcb-inventory-report-${new Date().toISOString().slice(0, 10)}.csv`,
-        headers,
-        rows
+        rows,
+        `pcb-inventory-report-${new Date().toISOString().slice(0, 10)}.csv`
     );
 }
 
 export function exportStockMovementReportCSV() {
-    const movements = getMovements();
-
-    const headers = [
+    const columns = [
         "Date",
-        "Component Name",
+        "Component",
         "MPN",
+        "Movement Type",
+        "Quantity",
         "Previous Stock",
-        "Quantity Changed",
         "New Stock",
-        "Reason"
+        "Notes"
     ];
 
-    const rows = movements.map(movement => [
-        movement.date,
-        movement.componentName,
-        movement.mpn,
-        Number(movement.previousStock) || 0,
-        Number(movement.quantityChanged) || 0,
-        Number(movement.newStock) || 0,
-        movement.reason
-    ]);
+    const rows = [
+        columns,
+        ...appState.stockMovements.map(movement => {
+            const component = appState.inventory.find(
+                item => item.id === movement.componentId
+            );
+
+            return [
+                movement.date || movement.createdAt || "",
+                component?.name || movement.componentName || "",
+                component?.mpn || movement.mpn || "",
+                movement.type || movement.action || "",
+                movement.quantity ?? "",
+                movement.previousStock ?? "",
+                movement.newStock ?? "",
+                movement.notes || movement.reason || ""
+            ];
+        })
+    ];
 
     downloadCSV(
-        `pcb-stock-movements-${new Date().toISOString().slice(0, 10)}.csv`,
-        headers,
-        rows
+        rows,
+        `pcb-stock-movements-${new Date().toISOString().slice(0, 10)}.csv`
     );
-}
-
-function getReportStatistics(inventory) {
-    const totalUnits = inventory.reduce(
-        (total, component) => total + (Number(component.stock) || 0),
-        0
-    );
-
-    const lowStock = inventory.filter(component =>
-        getStockStatus(component.stock, component.minStock) === "Low Stock"
-    ).length;
-
-    const outOfStock = inventory.filter(component =>
-        getStockStatus(component.stock, component.minStock) === "Out of Stock"
-    ).length;
-
-    return {
-        totalTypes: inventory.length,
-        totalUnits,
-        totalValue: calculateInventoryValue(inventory),
-        lowStock,
-        outOfStock
-    };
-}
-
-function createPrintableInventoryRows(inventory) {
-    if (!inventory.length) {
-        return `
-            <tr>
-                <td colspan="8" class="empty">
-                    No inventory records available.
-                </td>
-            </tr>
-        `;
-    }
-
-    return inventory.map(component => {
-        const stock = Number(component.stock) || 0;
-        const price = Number(component.unitPrice) || 0;
-        const status = getStockStatus(stock, component.minStock);
-
-        return `
-            <tr>
-                <td>${escapeHTML(component.mpn || "N/A")}</td>
-                <td>${escapeHTML(component.name || "Unnamed")}</td>
-                <td>${escapeHTML(component.manufacturer || "N/A")}</td>
-                <td>${escapeHTML(component.category || "N/A")}</td>
-                <td>${stock}</td>
-                <td>${money(price)}</td>
-                <td>${money(stock * price)}</td>
-                <td>${escapeHTML(status)}</td>
-            </tr>
-        `;
-    }).join("");
-}
-
-function createPrintableMovementRows(movements) {
-    if (!movements.length) {
-        return `
-            <tr>
-                <td colspan="7" class="empty">
-                    No stock movement records available.
-                </td>
-            </tr>
-        `;
-    }
-
-    return movements.map(movement => `
-        <tr>
-            <td>${escapeHTML(safeDate(movement.date))}</td>
-            <td>${escapeHTML(movement.componentName || "Component")}</td>
-            <td>${escapeHTML(movement.mpn || "N/A")}</td>
-            <td>${Number(movement.previousStock) || 0}</td>
-            <td>${Number(movement.quantityChanged) || 0}</td>
-            <td>${Number(movement.newStock) || 0}</td>
-            <td>${escapeHTML(movement.reason || "Stock update")}</td>
-        </tr>
-    `).join("");
 }
 
 export function printInventoryReport() {
-    const inventory = getInventory();
-    const movements = getMovements().slice(0, 20);
-    const stats = getReportStatistics(inventory);
+    const inventory = appState.inventory;
+    const movements = [...appState.stockMovements].slice(-20).reverse();
+
+    const totalComponents = inventory.length;
+
+    const totalUnits = inventory.reduce(
+        (total, item) => total + (Number(item.stock) || 0),
+        0
+    );
+
+    const lowStock = inventory.filter(
+        item => getStockStatus(item.stock, item.minStock) === "Low Stock"
+    ).length;
+
+    const outOfStock = inventory.filter(
+        item => getStockStatus(item.stock, item.minStock) === "Out of Stock"
+    ).length;
+
+    const totalValue = calculateInventoryValue(inventory);
+
+    const inventoryRows = inventory.map(component => `
+        <tr>
+            <td>${escapeHTML(component.mpn)}</td>
+            <td>${escapeHTML(component.name)}</td>
+            <td>${escapeHTML(component.manufacturer)}</td>
+            <td>${escapeHTML(component.category)}</td>
+            <td>${Number(component.stock) || 0}</td>
+            <td>${Number(component.minStock) || 0}</td>
+            <td>${escapeHTML(getStockStatus(component.stock, component.minStock))}</td>
+            <td>${escapeHTML(formatCurrency(
+                (Number(component.unitPrice) || 0) *
+                (Number(component.stock) || 0)
+            ))}</td>
+        </tr>
+    `).join("");
+
+    const movementRows = movements.map(movement => {
+        const component = inventory.find(
+            item => item.id === movement.componentId
+        );
+
+        const dateValue = movement.date || movement.createdAt;
+        const date = dateValue
+            ? formatDate(dateValue)
+            : "Not available";
+
+        return `
+            <tr>
+                <td>${escapeHTML(date)}</td>
+                <td>${escapeHTML(component?.name || movement.componentName || "Unknown")}</td>
+                <td>${escapeHTML(component?.mpn || movement.mpn || "")}</td>
+                <td>${escapeHTML(movement.type || movement.action || "")}</td>
+                <td>${escapeHTML(movement.quantity ?? "")}</td>
+            </tr>
+        `;
+    }).join("");
 
     const reportWindow = window.open("", "_blank");
 
     if (!reportWindow) {
         alert("Please allow pop-ups to print the inventory report.");
-        return false;
+        return;
     }
 
-    const reportHTML = `
+    reportWindow.document.write(`
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -250,71 +203,55 @@ export function printInventoryReport() {
                 }
 
                 body {
-                    margin: 0;
-                    padding: 30px;
-                    color: #26352d;
                     font-family: Arial, sans-serif;
-                    font-size: 12px;
+                    color: #222;
+                    padding: 25px;
                 }
 
                 h1 {
-                    margin: 0 0 6px;
                     color: #276221;
-                    font-size: 24px;
+                    margin-bottom: 5px;
                 }
 
                 h2 {
-                    margin: 30px 0 12px;
                     color: #276221;
-                    font-size: 16px;
+                    margin-top: 30px;
                 }
 
-                p {
-                    color: #68766d;
-                }
-
-                .report-header {
-                    padding-bottom: 18px;
-                    border-bottom: 2px solid #276221;
+                .report-date {
+                    color: #666;
+                    font-size: 12px;
                 }
 
                 .summary {
                     display: grid;
-                    grid-template-columns: repeat(4, 1fr);
-                    gap: 10px;
-                    margin-top: 20px;
+                    grid-template-columns: repeat(3, 1fr);
+                    gap: 12px;
+                    margin: 20px 0;
                 }
 
                 .summary-card {
+                    border: 1px solid #ccc;
                     padding: 14px;
-                    border: 1px solid #dce5dc;
                     border-radius: 8px;
                 }
 
-                .summary-card span {
-                    display: block;
-                    margin-bottom: 7px;
-                    color: #68766d;
-                    font-size: 11px;
-                }
-
                 .summary-card strong {
-                    font-size: 17px;
-                    overflow-wrap: anywhere;
+                    display: block;
+                    font-size: 20px;
+                    margin-top: 6px;
                 }
 
                 table {
                     width: 100%;
                     border-collapse: collapse;
+                    font-size: 11px;
                 }
 
-                th,
-                td {
-                    padding: 9px 7px;
-                    border: 1px solid #dce5dc;
+                th, td {
+                    border: 1px solid #ccc;
+                    padding: 7px;
                     text-align: left;
-                    vertical-align: top;
-                    overflow-wrap: anywhere;
                 }
 
                 th {
@@ -322,75 +259,55 @@ export function printInventoryReport() {
                     color: #276221;
                 }
 
-                .empty {
-                    padding: 20px;
-                    color: #68766d;
-                    text-align: center;
-                }
-
-                .report-footer {
-                    margin-top: 30px;
-                    padding-top: 12px;
-                    border-top: 1px solid #dce5dc;
-                    color: #68766d;
-                    font-size: 10px;
-                }
-
                 @media print {
                     body {
                         padding: 0;
                     }
 
-                    .summary-card,
-                    table {
+                    .summary-card {
                         break-inside: avoid;
                     }
 
-                    h2 {
-                        break-after: avoid;
-                    }
-                }
-
-                @media (max-width: 700px) {
-                    body {
-                        padding: 12px;
-                    }
-
-                    .summary {
-                        grid-template-columns: repeat(2, 1fr);
+                    tr {
+                        break-inside: avoid;
                     }
                 }
             </style>
         </head>
 
         <body>
-            <header class="report-header">
-                <h1>PCB Component BOM & Inventory Manager</h1>
-                <p>Inventory and Stock Movement Report</p>
-                <p>Generated: ${escapeHTML(safeDate(new Date()))}</p>
-            </header>
+            <h1>PCB Component BOM & Inventory Manager</h1>
+            <p>Inventory Report</p>
+            <p class="report-date">
+                Generated: ${escapeHTML(new Date().toLocaleString("en-PH"))}
+            </p>
 
-            <section class="summary">
+            <div class="summary">
                 <div class="summary-card">
-                    <span>Component Types</span>
-                    <strong>${stats.totalTypes.toLocaleString("en-PH")}</strong>
+                    Total Components
+                    <strong>${totalComponents}</strong>
                 </div>
 
                 <div class="summary-card">
-                    <span>Total Stock Units</span>
-                    <strong>${stats.totalUnits.toLocaleString("en-PH")}</strong>
+                    Total Stock Units
+                    <strong>${totalUnits}</strong>
                 </div>
 
                 <div class="summary-card">
-                    <span>Inventory Value</span>
-                    <strong>${escapeHTML(money(stats.totalValue))}</strong>
+                    Low Stock
+                    <strong>${lowStock}</strong>
                 </div>
 
                 <div class="summary-card">
-                    <span>Low / Out of Stock</span>
-                    <strong>${stats.lowStock} / ${stats.outOfStock}</strong>
+                    Out of Stock
+                    <strong>${outOfStock}</strong>
                 </div>
-            </section>
+
+                <div class="summary-card">
+                    Inventory Value
+                    <strong>${escapeHTML(formatCurrency(totalValue))}</strong>
+                </div>
+            </div>
 
             <h2>Inventory Records</h2>
 
@@ -402,14 +319,18 @@ export function printInventoryReport() {
                         <th>Manufacturer</th>
                         <th>Category</th>
                         <th>Stock</th>
-                        <th>Unit Price</th>
-                        <th>Total Value</th>
+                        <th>Minimum</th>
                         <th>Status</th>
+                        <th>Value</th>
                     </tr>
                 </thead>
 
                 <tbody>
-                    ${createPrintableInventoryRows(inventory)}
+                    ${inventoryRows || `
+                        <tr>
+                            <td colspan="8">No inventory records found.</td>
+                        </tr>
+                    `}
                 </tbody>
             </table>
 
@@ -421,180 +342,118 @@ export function printInventoryReport() {
                         <th>Date</th>
                         <th>Component</th>
                         <th>MPN</th>
-                        <th>Previous</th>
-                        <th>Changed</th>
-                        <th>New Stock</th>
-                        <th>Reason</th>
+                        <th>Type</th>
+                        <th>Quantity</th>
                     </tr>
                 </thead>
 
                 <tbody>
-                    ${createPrintableMovementRows(movements)}
+                    ${movementRows || `
+                        <tr>
+                            <td colspan="5">No stock movements found.</td>
+                        </tr>
+                    `}
                 </tbody>
             </table>
 
-            <footer class="report-footer">
-                PCB Component BOM & Inventory Manager ·
-                Generated ${escapeHTML(new Date().toLocaleString("en-PH"))}
-            </footer>
-
             <script>
-                window.addEventListener("load", () => {
-                    window.print();
-                });
-            <\/script>
+                window.onload = () => window.print();
+            </script>
         </body>
         </html>
-    `;
+    `);
 
-    reportWindow.document.open();
-    reportWindow.document.write(reportHTML);
     reportWindow.document.close();
-
-    return true;
 }
 
-function injectReportStyles() {
-    if (document.getElementById("inventory-report-styles")) return;
+function addReportButtons() {
+    const toolbar = document.querySelector(
+        "#analytics-module-content .analytics-toolbar"
+    );
+
+    if (!toolbar || document.getElementById("inventory-report-controls")) {
+        return;
+    }
+
+    const controls = document.createElement("div");
+
+    controls.id = "inventory-report-controls";
+    controls.className = "report-controls";
+
+    controls.innerHTML = `
+        <button type="button"
+                class="secondary-button"
+                id="report-inventory-csv">
+            Export Inventory CSV
+        </button>
+
+        <button type="button"
+                class="secondary-button"
+                id="report-movements-csv">
+            Export Movement CSV
+        </button>
+
+        <button type="button"
+                class="primary-button"
+                id="report-print">
+            Print Report
+        </button>
+    `;
+
+    toolbar.appendChild(controls);
+
+    document.getElementById("report-inventory-csv")
+        .addEventListener("click", exportInventoryReportCSV);
+
+    document.getElementById("report-movements-csv")
+        .addEventListener("click", exportStockMovementReportCSV);
+
+    document.getElementById("report-print")
+        .addEventListener("click", printInventoryReport);
+}
+
+export function initializeReports() {
+    if (initialized) {
+        return true;
+    }
 
     const style = document.createElement("style");
-    style.id = "inventory-report-styles";
 
     style.textContent = `
-        .report-actions {
+        .report-controls {
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
-        }
-
-        .report-action-button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 7px;
-            padding: 9px 12px;
-            border: 1px solid var(--border-color, #e2dfda);
-            border-radius: 8px;
-            background: #fff;
-            color: var(--text-primary, #26352d);
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s ease;
-        }
-
-        .report-action-button:hover {
-            background: var(--green-pale, #cce7c9);
-        }
-
-        .report-action-button.primary {
-            border-color: var(--primary, #276221);
-            background: var(--primary, #276221);
-            color: #fff;
-        }
-
-        .report-action-button.primary:hover {
-            background: #3b8132;
+            margin-top: 12px;
         }
 
         @media (max-width: 600px) {
-            .report-actions {
-                width: 100%;
+            .report-controls {
+                flex-direction: column;
             }
 
-            .report-action-button {
-                flex: 1 1 140px;
+            .report-controls button {
+                width: 100%;
             }
         }
     `;
 
     document.head.appendChild(style);
-}
 
-function injectReportControls() {
-    const toolbar = document.querySelector(
-        "#analytics-module-content .analytics-toolbar"
-    );
+    addReportButtons();
 
-    if (!toolbar || toolbar.querySelector(".report-actions")) {
-        return;
-    }
+    const analytics = document.getElementById("analytics-module-content");
 
-    const actions = document.createElement("div");
-    actions.className = "report-actions";
+    if (analytics) {
+        observer = new MutationObserver(addReportButtons);
 
-    actions.innerHTML = `
-        <button
-            type="button"
-            class="report-action-button"
-            id="export-inventory-report">
-            Export Inventory CSV
-        </button>
-
-        <button
-            type="button"
-            class="report-action-button"
-            id="export-movement-report">
-            Export Movement CSV
-        </button>
-
-        <button
-            type="button"
-            class="report-action-button primary"
-            id="print-inventory-report">
-            Print Report
-        </button>
-    `;
-
-    toolbar.appendChild(actions);
-}
-
-function initializeReportEvents() {
-    document.addEventListener("click", event => {
-        if (event.target.closest("#export-inventory-report")) {
-            exportInventoryReportCSV();
-        }
-
-        if (event.target.closest("#export-movement-report")) {
-            exportStockMovementReportCSV();
-        }
-
-        if (event.target.closest("#print-inventory-report")) {
-            printInventoryReport();
-        }
-    });
-}
-
-export function initializeReports() {
-    const analyticsContent = document.getElementById(
-        "analytics-module-content"
-    );
-
-    if (!analyticsContent) {
-        console.warn(
-            "Reports initialization skipped: analytics content was not found."
-        );
-        return false;
-    }
-
-    injectReportStyles();
-    injectReportControls();
-
-    if (!reportsInitialized) {
-        initializeReportEvents();
-
-        reportsObserver = new MutationObserver(() => {
-            injectReportControls();
-        });
-
-        reportsObserver.observe(analyticsContent, {
+        observer.observe(analytics, {
             childList: true,
             subtree: true
         });
-
-        reportsInitialized = true;
     }
 
-    console.log("Inventory reports initialized successfully.");
+    initialized = true;
+
     return true;
 }
