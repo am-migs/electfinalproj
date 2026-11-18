@@ -8,7 +8,6 @@ import { initializeDashboard } from "./modules/dashboard.js";
 import { initializeBOM } from "./modules/bom.js";
 import { initializePinout } from "./modules/pinout.js";
 import { initializeAnalytics } from "./modules/analytics.js";
-import { initializeSettings } from "./modules/settings.js";
 import { initializeCatalogSearch } from "./modules/catalog-search.js";
 
 import { initializeImportExport } from "./services/import-export.js";
@@ -20,13 +19,8 @@ import { initializeCurrency } from "./services/currency.js";
 const APP_NAME = "PCB Component BOM & Inventory Manager";
 
 function initializeIcons() {
-    if (
-        window.lucide &&
-        typeof window.lucide.createIcons === "function"
-    ) {
+    if (window.lucide?.createIcons) {
         window.lucide.createIcons();
-    } else {
-        console.warn("Lucide icons could not be loaded.");
     }
 }
 
@@ -45,7 +39,6 @@ function initializeApplication() {
         initializeBOM();
         initializePinout();
         initializeAnalytics();
-        initializeSettings();
 
         initializeImportExport();
         initializeNotifications();
