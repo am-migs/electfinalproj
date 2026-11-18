@@ -108,7 +108,13 @@ function WorkspaceApp({ user, organization, role, onSignOut }) {
       .finally(() => { if (active) setCloudLoading(false); });
     return () => { active = false; };
   }, [organization.id, user]);
-  useEffect(() => { getCatalogueInformation().then(setCatalogInfo).catch(() => {}); }, []);\n  useEffect(() => {\n    if (!cloudReady || !cloudSnapshot.current) return;\n    if (!["owner", "admin", "editor"].includes(role)) return;\n    const snapshot = db;\n    const previous = cloudSnapshot.current;\n    if (snapshot === previous) return;\n    cloudQueue.current = cloudQueue.current.then(() =>\n      syncCloudWorkspace(organization.id, user, snapshot, previous)\n    ).then(() => { cloudSnapshot.current = snapshot; setCloudError(""); })\n      .catch(error => { setCloudError("Cloud save failed: " + (error.message || "Unknown database error")); });\n  }, [db, cloudReady, organization.id, user, role]);
+  useEffect(() => { getCatalogueInformation().then(setCatalogInfo).catch(() => {}); }, [] );
+  useEffect(() => {\n    if (!cloudReady || !cloudSnapshot.current) return;
+    if (!["owner", "admin", "editor"].includes(role)) return;\n    const snapshot = db;
+    const previous = cloudSnapshot.current;\n    if (snapshot === previous) return;
+    cloudQueue.current = cloudQueue.current.then(() =>\n      syncCloudWorkspace(organization.id, user, snapshot, previous)
+    ).then(() => { cloudSnapshot.current = snapshot; setCloudError(""); })
+      .catch(error => { setCloudError("Cloud save failed: " + (error.message || "Unknown database error")); });\n  }, [db, cloudReady, organization.id, user, role]);
 
   const inventory = db.inventory || [];
   const projects = db.projects || [];
@@ -124,7 +130,9 @@ function WorkspaceApp({ user, organization, role, onSignOut }) {
     if (sort === "value") return (Number(b.stock) * Number(b.unitPrice)) - (Number(a.stock) * Number(a.unitPrice));
     return String(a[sort] || "").localeCompare(String(b[sort] || ""));
   }), [inventory, query, category, sort]);
-  const update = patch => {\n    if (!["owner", "admin", "editor"].includes(role)) { alert("Your workspace role is read-only. Ask an administrator for edit access."); return; }\n    setDb(old => ({ ...old, ...patch }));\n  };
+  const update = patch => {
+    if (!["owner", "admin", "editor"].includes(role)) { alert("Your workspace role is read-only. Ask an administrator for edit access."); return; }
+    setDb(old => ({ ...old, ...patch }));\n  };
   const resetPartForm = () => { setEditing(null); setForm(blankPart); };
   const savePart = event => {
     event.preventDefault();
