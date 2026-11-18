@@ -1,26 +1,28 @@
 # Supabase setup — PCB Manager
 
-This project is being upgraded from browser-only LocalStorage to a shared, multi-user Supabase backend.
+This guide configures the React application at `pcb-inventory-manager` to use Supabase.
 
-## Current state
+## Current integration
 
-- Supabase authentication is integrated (email/password registration, sign-in, sign-out, and password reset).
-- The frontend loads organization-scoped inventory, projects, BOM lines, and stock history from Supabase.
-- Inventory, project, BOM, stock movement, and profile changes synchronize to the relational tables.
-- Existing LocalStorage data can be migrated from Settings when the cloud workspace is empty.
-- LocalStorage is retained as a migration source and JSON backup is still available.
+- Email/password registration and sign-in, sign-out, session persistence, password reset, and password update.
+- Personal organization/workspace creation through a database trigger.
+- Organization-scoped inventory, projects, BOM lines, and stock movement history.
+- Profile preferences (display currency and low-stock alerts).
+- Role-aware editing backed by PostgreSQL Row Level Security (RLS).
+- Optional LocalStorage-to-cloud migration and JSON backup/restore.
 
-## 1. Create the Supabase project
+## 1. Supabase project
 
-1. Open https://supabase.com/ and sign in.
-2. Create a new project for PCB Component BOM & Inventory Manager.
-3. Choose a strong database password and save it somewhere secure.
-4. Select a region close to the intended users, such as Singapore if available.
-5. Wait for the database to finish provisioning.
+Create a Supabase project and keep its database password private. The project URL is available in Project Settings → API.
 
-## 2. Apply the database migration
+## 2. Apply database migrations
 
-Recommended CLI workflow:
+The migrations must be applied in this order:
+
+1. `supabase/migrations/202611180001_initial_schema.sql`
+2. `supabase/migrations/202611180002_profile_preferences.sql`
+
+**Fresh project using the CLI:**
 
 ```bash
 cd pcb-inventory-manager
@@ -30,64 +32,64 @@ npx supabase link --project-ref YOUR_PROJECT_REF
 npx supabase db push
 ```
 
-The project reference is available in the Supabase project URL/settings. Review the SQL migration before applying it to any production database.
+If the initial schema migration was already pasted into the Supabase SQL Editor, do not blindly run the initial migration again. Apply only `202611180002_profile_preferences.sql` in SQL Editor. Confirm that `profiles.preferences` exists before using the updated application.
 
-You can also paste the migration into the Supabase SQL Editor for a first-time setup, but the CLI migration workflow is preferred for repeatable development.
+The initial migration creates profiles, organizations, memberships, components, suppliers, projects, BOM items, stock movements, purchase orders, purchase-order items, and activity logs. It also enables RLS and creates the organization access policies.
 
-## 3. Configure local environment variables
+## 3. Configure local environment
 
-After the Supabase project is created, copy the Project URL and publishable/anon key from the project's API settings.
-
-Create a local `.env.local` file in this folder:
+Create `.env.local` in `pcb-inventory-manager`:
 
 ```env
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=YOUR_SUPABASE_PUBLISHABLE_KEY
 ```
 
-Never put a Supabase service-role key in a Vite environment variable. Vite variables are exposed to browser users. The frontend must use only the publishable/anon key; database access is protected by RLS.
+Use the Supabase **publishable** key (or legacy anon key) only. Never put a service-role/secret key in Vite variables or frontend code. Do not commit `.env.local`.
 
-Do not commit `.env.local` or any real credentials.
+The repository contains `.env.example` with placeholders.
 
-## 4. Authentication settings
+## 4. Configure Supabase Auth URLs
 
-For local development, configure the Supabase Auth Site URL to your Vite development origin (usually `http://localhost:5173`). Add the production domain to the allowed redirect URLs before deployment.
+In Authentication → URL Configuration:
 
-Email confirmation and password-reset redirect URLs should be configured before enabling public registration. Add both `http://localhost:5173/**` and your deployed Vercel origin (for example `https://your-project.vercel.app/**`) under Authentication → URL Configuration → Redirect URLs. Set the Site URL to the production domain.
+- Site URL: `https://electfinalproj.vercel.app`
+- Redirect URLs: `https://electfinalproj.vercel.app/**`
+- Local redirect URL: `http://localhost:5173/**`
 
-## 5. Verify the schema
+Enable email confirmation according to the intended registration policy. Test the confirmation and password-recovery email links.
 
-After applying the migration, verify these tables exist in the Supabase Table Editor:
+## 5. Configure Vercel
 
-- profiles
-- organizations
-- organization_members
-- components
-- suppliers
-- projects
-- bom_items
-- stock_movements
-- purchase_orders
-- purchase_order_items
-- activity_logs
+The Vercel project should use:
 
-RLS should be enabled on every application table. Test access using separate user accounts before importing real inventory. A new registration automatically creates a personal workspace and assigns the registrant the `owner` role.
+- Root Directory: `pcb-inventory-manager`
+- Framework: Vite
+- Build command: `npm run build`
+- Output directory: `dist`
 
-## Security notes
+Add these environment variables for Production (and Preview/Development if used):
 
-- Never disable RLS to make the frontend work.
-- Never expose the service-role key in the browser or GitHub.
-- Organization membership determines which workspace records a signed-in user can access.
-- Owner/admin/editor/viewer roles are represented in the schema. UI-level role restrictions must be paired with database RLS policies.
-- The first registered user receives a personal workspace through the Auth trigger. Review this behavior if the deployment will use invitation-only registration.
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
 
-## 6. First sign-in and local-data migration
+Redeploy after changing environment variables. The publishable key is intended for browser use; RLS is responsible for protecting database rows.
 
-1. Configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in the Vercel project, then redeploy.
-2. Open the deployed app and create an account or sign in.
-3. If email confirmation is enabled, confirm the address before signing in.
-4. The app loads the signed-in user's organization and cloud records.
-5. If the organization is empty and this browser has old PCB Manager LocalStorage records, open Settings and select **Migrate existing local data to cloud**.
-6. Keep the browser tab open until synchronization completes. Export a JSON backup first as an additional precaution.
+## 6. Verify the application
 
-The application deliberately blocks deletion of components that have stock movement history so the stock audit trail remains intact. Database RLS remains the final access-control layer; the role-aware frontend is not a substitute for it.
+1. Register a new account and confirm its email if confirmation is enabled.
+2. Sign in and verify that a personal workspace is created.
+3. Test password reset and set a new password from the recovery screen.
+4. Add/edit/delete components and projects; test stock-in/out and movement history.
+5. Test BOM quantities, designators, cost, and shortage calculations.
+6. Change currency and low-stock preferences, refresh, and confirm they persist.
+7. Test a viewer account and confirm it cannot modify records.
+8. Register a second user and verify that the first user's data is not visible.
+9. Test LocalStorage migration in the same browser that contains the old data.
+10. Export and restore a JSON backup.
+
+Do not disable RLS to make a request succeed. Database policies—not just UI restrictions—must enforce access.
+
+## Current verification status
+
+The GitHub Actions production build passed after the recent integration fixes. Live Supabase authentication, RLS, database migration, and browser workflows still need to be tested against the configured Supabase project.
