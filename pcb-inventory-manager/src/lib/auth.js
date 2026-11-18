@@ -47,3 +47,9 @@ export function subscribeToAuthChanges(callback) {
 
   return () => data.subscription.unsubscribe();
 }
+
+
+export async function updatePassword(password) {
+  const client = requireSupabase();
+  return client.auth.updateUser({ password });
+}
