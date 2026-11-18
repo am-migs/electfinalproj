@@ -6,6 +6,7 @@ import { formatCurrency } from "./core/utilities.js";
 import { initializeInventory } from "./modules/inventory.js";
 import { initializeDashboard } from "./modules/dashboard.js";
 import { initializeBOM } from "./modules/bom.js";
+import { initializeAnalytics } from "./modules/analytics.js";
 
 const APP_NAME = "PCB Component BOM & Inventory Manager";
 
@@ -22,6 +23,7 @@ function initializeApplication() {
         initializeInventory();
         initializeDashboard();
         initializeBOM();
+        initializeAnalytics();
 
         window.PCBManager = {
             name: APP_NAME,
@@ -39,6 +41,12 @@ function initializeApplication() {
 
             getSettings() {
                 return { ...appState.settings };
+            },
+
+            refreshAnalytics() {
+                return import("./modules/analytics.js").then(module => {
+                    module.refreshAnalytics();
+                });
             }
         };
 
