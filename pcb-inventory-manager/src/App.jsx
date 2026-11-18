@@ -61,7 +61,7 @@ function parseCSV(text) {
   }
   row.push(cell); if (row.some(v => v.trim())) rows.push(row);
   if (rows.length < 2) return [];
-  const headers = rows.shift().map(h => h.replace(/^\\uFEFF/, "").trim().toLowerCase());
+  const headers = rows.shift().map(h => (h.charCodeAt(0) === 0xFEFF ? h.slice(1) : h).trim().toLowerCase());
   return rows.map(values => Object.fromEntries(headers.map((h, i) => [h, values[i] ?? ""])));
 }
 export default function App() {
