@@ -61,7 +61,7 @@ function parseCSV(text) {
   }
   row.push(cell); if (row.some(v => v.trim())) rows.push(row);
   if (rows.length < 2) return [];
-  const headers = rows.shift().map(h => h.trim().toLowerCase());
+  const headers = rows.shift().map(h => h.replace(/^\\uFEFF/, "").trim().toLowerCase());
   return rows.map(values => Object.fromEntries(headers.map((h, i) => [h, values[i] ?? ""])));
 }
 export default function App() {
@@ -123,8 +123,23 @@ export default function App() {
       updatedAt: new Date().toISOString(),
       createdAt: editing ? (inventory.find(x => x.id === editing)?.createdAt || new Date().toISOString()) : new Date().toISOString()
     };
-    update({ inventory: editing ? inventory.map(x => x.id === editing ? part : x) : [part, ...inventory] });
-    if (!editing && part.stock > 0) update({ movements: [{ id: makeId(), partId: part.id, partName: part.name, type: "Initial stock", quantity: part.stock, note: "Initial inventory entry", date: new Date().toISOString() }, ...movements] });
+    const previousStock = editing ? Number(inventory.find(x => x.id === editing)?.stock || 0) : 0;
+    const stockDifference = part.stock - previousStock;
+    const stockMovement = stockDifference === 0 ? null : {
+      id: makeId(),
+      partId: part.id,
+      partName: part.name,
+      type: editing ? "Stock correction" : "Initial stock",
+      quantity: Math.abs(stockDifference),
+      note: editing
+        ? `Component details edited (stock changed from ${previousStock} to ${part.stock}).`
+        : "Initial inventory entry",
+      date: new Date().toISOString()
+    };
+    update({
+      inventory: editing ? inventory.map(x => x.id === editing ? part : x) : [part, ...inventory],
+      movements: stockMovement ? [stockMovement, ...movements] : movements
+    });
     resetPartForm();
   };
   const editPart = part => {
@@ -207,6 +222,7 @@ export default function App() {
       const rows = parseCSV(await file.text());
       let added = 0, skipped = 0;
       const next = [...inventory];
+      const importedMovements = [];
       rows.forEach(row => {
         const mpn = row.mpn || row.lcsc || row.partnumber || "";
         if (!mpn.trim() || next.some(x => String(x.mpn).toLowerCase() === mpn.trim().toLowerCase())) { skipped++; return; }
@@ -216,9 +232,22 @@ export default function App() {
           unitPrice: Math.max(0, Number(row.unitprice ?? row.price) || 0),
           stock: Math.max(0, Number(row.stock) || 0),
           minStock: Math.max(0, Number(row.minstock) || 0)
-        }); added++;
+        });
+        if (Number(row.stock) > 0) {
+          const importedPart = next[next.length - 1];
+          importedMovements.push({
+            id: makeId(),
+            partId: importedPart.id,
+            partName: importedPart.name,
+            type: "Initial stock",
+            quantity: importedPart.stock,
+            note: "Imported from CSV",
+            date: new Date().toISOString()
+          });
+        }
+        added++;
       });
-      update({ inventory: next });
+      update({ inventory: next, movements: [...importedMovements, ...movements] });
       alert("CSV import complete. Added: " + added + ". Skipped: " + skipped + ".");
     } catch (error) { alert("Unable to import CSV: " + error.message); }
     event.target.value = "";
