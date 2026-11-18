@@ -157,12 +157,17 @@ export async function syncCloudWorkspace(organizationId, user, next, previous) {
   const previousMovementIds = new Set((before.movements || []).map(item => item.id));
   const newMovements = currentMovements.filter(item => !previousMovementIds.has(item.id));
   if (newMovements.length) {
+    const { data: alreadyStored, error: lookupError } = await client.from("stock_movements").select("id").eq("organization_id", organizationId).in("id", newMovements.map(item => item.id));
+    fail(lookupError);
+    const storedIds = new Set((alreadyStored || []).map(row => row.id));
+    const movementsToInsert = newMovements.filter(item => !storedIds.has(item.id));
+    if (!movementsToInsert.length) return;
     const partMap = new Map(currentParts.map(part => [part.id, part]));
-    const { error } = await client.from("stock_movements").insert(newMovements.map(item => ({
+    const { error } = await client.from("stock_movements").insert(movementsToInsert.map(item => ({
       id: item.id, organization_id: organizationId, component_id: item.partId,
       movement_type: movementTypes[item.type] || "adjustment",
       quantity: Math.max(1, Number(item.quantity || 1)),
-      quantity_before: 0, quantity_after: Number(partMap.get(item.partId)?.stock || 0),
+      quantity_before: Number(item.quantityBefore ?? 0), quantity_after: Number(item.quantityAfter ?? partMap.get(item.partId)?.stock ?? 0),
       note: item.note || "", created_by: user.id,
       created_at: item.date || new Date().toISOString()
     })));
