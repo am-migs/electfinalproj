@@ -1,0 +1,382 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>PCB Inventory Manager</title>
+
+    <!-- CSS -->
+<!-- CSS -->
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/modules.css">
+<link rel="stylesheet" href="css/responsive.css">
+
+<!-- Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+
+    <!-- MAIN APPLICATION -->
+    <div class="app-container">
+
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+
+            <div class="brand">
+                <div class="brand-icon">
+                    <i data-lucide="circuit-board"></i>
+                </div>
+
+                <div>
+                    <h2>PCB Manager</h2>
+                    <p>Hardware Inventory System</p>
+                </div>
+            </div>
+
+            <!-- NAVIGATION -->
+            <nav class="sidebar-nav">
+
+                <p class="nav-label">MAIN MENU</p>
+
+                <button class="nav-link active" data-page="dashboard">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span>Dashboard</span>
+                </button>
+
+                <button class="nav-link" data-page="inventory">
+                    <i data-lucide="boxes"></i>
+                    <span>Inventory Catalog</span>
+                </button>
+
+                <button class="nav-link" data-page="bom">
+                    <i data-lucide="clipboard-list"></i>
+                    <span>BOM Manager</span>
+                </button>
+
+                <button class="nav-link" data-page="pinout">
+                    <i data-lucide="cpu"></i>
+                    <span>Pinout Inspector</span>
+                </button>
+
+                <button class="nav-link" data-page="analytics">
+                    <i data-lucide="chart-no-axes-combined"></i>
+                    <span>Analytics</span>
+                </button>
+
+            </nav>
+
+            <!-- SIDEBAR FOOTER -->
+            <div class="sidebar-footer">
+                <span class="status-indicator"></span>
+                <span>Local Database</span>
+            </div>
+
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+
+            <!-- TOP HEADER -->
+            <header class="topbar">
+
+                <!-- SIDEBAR TOGGLE -->
+                <button class="sidebar-toggle" id="sidebar-toggle"
+                    aria-label="Toggle sidebar"
+                    aria-expanded="false"
+                    title="Toggle sidebar">
+
+                    <i data-lucide="panel-left"></i>
+                    <span class="toggle-text">Toggle Sidebar</span>
+
+                </button>
+
+                <div class="topbar-heading">
+                    <h1 id="page-title">Dashboard</h1>
+                </div>
+
+                <div class="topbar-actions">
+                    <button class="icon-button" id="notification-button"
+                        aria-label="Notifications">
+                        <i data-lucide="bell"></i>
+                    </button>
+
+                    <div class="user-profile">
+                        <div class="user-avatar">CPE</div>
+
+                        <div>
+                            <strong>Administrator</strong>
+                            <span>Inventory Manager</span>
+                        </div>
+                    </div>
+                </div>
+
+            </header>
+
+            <!-- PAGE CONTENT -->
+            <div class="page-content">
+
+                <!-- DASHBOARD PAGE -->
+                <section class="page active" id="dashboard">
+
+                    <div class="welcome-section">
+                        <div>
+                            <h2>Welcome to PCB Manager</h2>
+                            <p>
+                                Manage your electronic components,
+                                projects, and bill of materials.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- STATISTICS -->
+                    <div class="stats-grid">
+
+                        <div class="stat-card">
+                            <div class="stat-icon blue">
+                                <i data-lucide="package"></i>
+                            </div>
+
+                            <p>Total Components</p>
+                            <h3 id="total-components">0</h3>
+                            <span>Registered component types</span>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-icon green">
+                                <i data-lucide="boxes"></i>
+                            </div>
+
+                            <p>Total Stock Units</p>
+                            <h3 id="total-units">0</h3>
+                            <span>Available inventory quantity</span>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-icon yellow">
+                                <i data-lucide="alert-triangle"></i>
+                            </div>
+
+                            <p>Low Stock Alerts</p>
+                            <h3 id="low-stock">0</h3>
+                            <span>Components needing attention</span>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-icon purple">
+                                <i data-lucide="wallet"></i>
+                            </div>
+
+                            <p>Inventory Value</p>
+                            <h3 id="inventory-value">₱0.00</h3>
+                            <span>Estimated inventory value</span>
+                        </div>
+
+                    </div>
+
+                    <!-- DASHBOARD CONTENT -->
+                    <div class="dashboard-grid">
+
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <h3>Recent Inventory</h3>
+                                    <p>Recently added components</p>
+                                </div>
+                            </div>
+
+                            <div id="recent-inventory">
+                                <p class="empty-message">
+                                    No inventory data available yet.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <h3>Stock Alerts</h3>
+                                    <p>Components below minimum stock</p>
+                                </div>
+                            </div>
+
+                            <div id="dashboard-alerts">
+                                <p class="empty-message">
+                                    No stock alerts available.
+                                </p>
+                            </div>
+                        </div>
+
+                    </div>
+
+                </section>
+
+                <!-- INVENTORY PAGE -->
+                <section class="page" id="inventory">
+
+                    <div class="section-heading">
+                        <div>
+                            <h2>Inventory Catalog</h2>
+                            <p>
+                                Manage and monitor your electronic components.
+                            </p>
+                        </div>
+
+                        <button class="primary-button" id="add-component-button">
+                            <i data-lucide="plus"></i>
+                            Add Component
+                        </button>
+                    </div>
+
+                    <div class="panel">
+
+                        <div class="inventory-toolbar">
+
+                            <input
+                                type="search"
+                                id="inventory-search"
+                                placeholder="Search by MPN or manufacturer..."
+                            >
+
+                            <select id="category-filter">
+                                <option value="all">All Categories</option>
+                                <option value="Microcontrollers">Microcontrollers</option>
+                                <option value="Resistors">Resistors</option>
+                                <option value="Capacitors">Capacitors</option>
+                                <option value="Connectors">Connectors</option>
+                                <option value="Sensors">Sensors</option>
+                                <option value="ICs">ICs</option>
+                            </select>
+
+                            <select id="package-filter">
+                                <option value="all">All Packages</option>
+                                <option value="SMD">SMD</option>
+                                <option value="Through-Hole">Through-Hole</option>
+                            </select>
+
+                        </div>
+
+                        <div class="table-container">
+
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Component</th>
+                                        <th>Manufacturer</th>
+                                        <th>Category</th>
+                                        <th>Package</th>
+                                        <th>Location</th>
+                                        <th>Unit Price</th>
+                                        <th>Stock</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody id="inventory-table-body">
+                                    <tr>
+                                        <td colspan="9" class="empty-message">
+                                            Inventory will appear here.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                        </div>
+
+                    </div>
+
+                </section>
+
+                <!-- BOM PAGE -->
+                <section class="page" id="bom">
+
+                    <div class="section-heading">
+                        <div>
+                            <h2>Bill of Materials Manager</h2>
+                            <p>
+                                Manage project components and calculate costs.
+                            </p>
+                        </div>
+
+                        <button class="primary-button" id="create-project-button">
+                            <i data-lucide="plus"></i>
+                            Create Project
+                        </button>
+                    </div>
+
+                    <div class="panel">
+                        <p class="empty-message">
+                            Your project BOM will appear here.
+                        </p>
+                    </div>
+
+                </section>
+
+                <!-- PINOUT PAGE -->
+                <section class="page" id="pinout">
+
+                    <div class="section-heading">
+                        <div>
+                            <h2>Pinout Inspector</h2>
+                            <p>
+                                Inspect microcontroller pins and their functions.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <p class="empty-message">
+                            Pinout diagrams will appear here.
+                        </p>
+                    </div>
+
+                </section>
+
+                <!-- ANALYTICS PAGE -->
+                <section class="page" id="analytics">
+
+                    <div class="section-heading">
+                        <div>
+                            <h2>Inventory Analytics</h2>
+                            <p>
+                                Monitor inventory distribution and stock health.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <p class="empty-message">
+                            Inventory reports will appear here.
+                        </p>
+                    </div>
+
+                </section>
+
+            </div>
+
+            <!-- FOOTER -->
+            <footer class="footer">
+                <p>
+                    PCB Component BOM & Inventory Manager
+                </p>
+
+                <p>
+                    Antonio Miguel L. Lacanlale • BSCPE 3A
+                </p>
+            </footer>
+
+        </main>
+
+    </div>
+
+    <!-- JAVASCRIPT -->
+    <!-- Loads the modular application entry point -->
+    <script type="module" src="js/app.js"></script>
+
+</body>
+</html>
